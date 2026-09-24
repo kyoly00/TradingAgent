@@ -10,8 +10,10 @@ import requests
 from config.config import telegram_token, telegram_chat_id
 from utils.logger import log_telegram_in, log_telegram_out, log_info, log_error
 from utils.scheduler import token_scheduler
+from trading.stop_loss import stop_loss_watcher
 from .tel_send import send_telegram_message
 from .commands.dispatcher import dispatch_command
+
 
 
 class TelegramBot:
@@ -72,12 +74,14 @@ class TelegramBot:
             self.stop()
 
     def stop(self):
-        """봇 수신 루프 및 스케줄러를 안전하게 중단합니다."""
+        """봇 수신 루프 및 스케줄러, 스탑로스 감시 루프를 안전하게 중단합니다."""
         if not self.running:
             return
         self.running = False
         token_scheduler.stop()
-        log_info("🔌 [텔레그램 봇] 수신 루프 및 스케줄러가 종료되었습니다.")
+        stop_loss_watcher.stop()
+        log_info("🔌 [텔레그램 봇] 수신 루프, 스케줄러 및 스탑로스 감시가 종료되었습니다.")
+
 
     def _fetch_updates(self, timeout: int = 20) -> list[dict]:
         """

@@ -13,11 +13,11 @@ paper_socket_url = "wss://mockapi.kiwoom.com:10000"
 
 # 실제투자용 앱 키와 시크릿
 real_app_key = os.getenv("KIWOOM_APP_KEY")
-real_app_secret = os.getenv("KIWOOM_APP_SECRET_KEY")
+real_app_secret = os.getenv("KIWOOM_SECRET_KEY")
 
 # 모의투자용 앱 키와 시크릿
 paper_app_key = os.getenv("MO_KIWOOM_APP_KEY")
-paper_app_secret = os.getenv("MO_KIWOOM_APP_SECRET_KEY")
+paper_app_secret = os.getenv("MO_KIWOOM_SECRET_KEY")
 
 # 텔레그램용 챗 아이디와 토큰
 telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")

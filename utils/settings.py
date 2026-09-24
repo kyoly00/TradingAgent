@@ -35,6 +35,9 @@ def load_settings() -> dict:
         "token_renewal_time": "08:55",
         "market_start_time": "09:00",
         "market_end_time": "15:30",
+        "reservations": [],
+        "take_profit_rate": 5.0,
+        "stop_loss_rate": -10.0,
     }
 
 
@@ -238,5 +241,78 @@ def remove_all_reservations() -> tuple[bool, str, int]:
         return True, f"모든 예약 명령(총 {count}건)이 삭제되었습니다.", count
     else:
         return False, "설정 파일 저장 중 오류가 발생했습니다.", 0
+
+
+def get_take_profit_rate() -> float:
+    """설정된 익절 기준 수익률(%)을 반환합니다. 기본값: 5.0"""
+    val = get_setting("take_profit_rate", 5.0)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return 5.0
+
+
+def set_take_profit_rate(rate_input: float | str) -> tuple[bool, float, str]:
+    """
+    익절 기준(%)을 설정하고 config/data/settings.json에 저장합니다.
+    양수/음수 입력에 상관없이 항상 양수(+)로 변환하여 저장합니다.
+
+    :param rate_input: 익절 기준 퍼센티지 (예: 5, '5', '-5', '5%')
+    :return: (성공 여부 bool, 설정된 익절률 float, 안내 메시지 str)
+    """
+    try:
+        if isinstance(rate_input, str):
+            cleaned = rate_input.strip().replace("%", "")
+            val = float(cleaned)
+        else:
+            val = float(rate_input)
+    except (ValueError, TypeError):
+        return False, 0.0, f"올바른 숫자를 입력해 주세요: '{rate_input}'"
+
+    abs_rate = round(abs(val), 2)
+    if abs_rate == 0:
+        return False, 0.0, "익절 기준은 0%보다 커야 합니다."
+
+    if set_setting("take_profit_rate", abs_rate):
+        return True, abs_rate, f"+{abs_rate:g}%"
+    else:
+        return False, abs_rate, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def get_stop_loss_rate() -> float:
+    """설정된 손절 기준 수익률(%)을 반환합니다. 기본값: -10.0"""
+    val = get_setting("stop_loss_rate", -10.0)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return -10.0
+
+
+def set_stop_loss_rate(rate_input: float | str) -> tuple[bool, float, str]:
+    """
+    손절 기준(%)을 설정하고 config/data/settings.json에 저장합니다.
+    양수/음수 입력에 상관없이 항상 음수(-)로 변환하여 저장합니다.
+
+    :param rate_input: 손절 기준 퍼센티지 (예: 10, '10', '-10', '10%')
+    :return: (성공 여부 bool, 설정된 손절률 float, 안내 메시지 str)
+    """
+    try:
+        if isinstance(rate_input, str):
+            cleaned = rate_input.strip().replace("%", "")
+            val = float(cleaned)
+        else:
+            val = float(rate_input)
+    except (ValueError, TypeError):
+        return False, 0.0, f"올바른 숫자를 입력해 주세요: '{rate_input}'"
+
+    abs_rate = round(abs(val), 2)
+    if abs_rate == 0:
+        return False, 0.0, "손절 기준은 0%보다 커야 합니다 (예: 10 또는 -10 입력 시 -10%로 설정)."
+
+    neg_rate = -abs_rate
+    if set_setting("stop_loss_rate", neg_rate):
+        return True, neg_rate, f"{neg_rate:g}%"
+    else:
+        return False, neg_rate, "설정 파일 저장 중 오류가 발생했습니다."
 
 

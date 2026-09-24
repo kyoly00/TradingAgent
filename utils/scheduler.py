@@ -8,7 +8,6 @@ import time
 import threading
 from datetime import datetime
 from api.auth import session_manager
-from telegram.tel_send import send_telegram_message
 from utils.settings import get_token_renewal_time
 from utils.logger import log_info, log_error, log_telegram_out
 
@@ -86,6 +85,7 @@ class TokenRenewalScheduler:
         """
         from utils.settings import load_settings, save_settings
         from telegram.commands.dispatcher import dispatch_command
+        from telegram.tel_send import send_telegram_message
 
         settings = load_settings()
         reservations = settings.get("reservations", [])
@@ -158,6 +158,8 @@ class TokenRenewalScheduler:
         """
         토큰 갱신을 즉시 실행하고 터미널 및 텔레그램으로 결과를 보고합니다.
         """
+        from telegram.tel_send import send_telegram_message
+
         if now is None:
             now = datetime.now()
 

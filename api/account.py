@@ -17,7 +17,7 @@ def _parse_int(val_str: str | None) -> int:
     if not val_str:
         return 0
     try:
-        clean = val_str.strip()
+        clean = str(val_str).strip().replace(",", "")
         # 부호 판별
         sign = -1 if clean.startswith("-") else 1
         clean = clean.lstrip("+-").lstrip("0")
@@ -29,13 +29,17 @@ def _parse_int(val_str: str | None) -> int:
 
 
 def _parse_float(val_str: str | None) -> float:
-    """수익률 등 소수점 문자열을 안전하게 실수로 변환합니다."""
+    """수익률 등 소수점/부호/퍼센트 문자열을 안전하게 실수로 변환합니다."""
     if not val_str:
         return 0.0
     try:
-        return float(val_str.strip())
+        clean = str(val_str).strip().replace("%", "").replace(",", "")
+        if not clean:
+            return 0.0
+        return float(clean)
     except (ValueError, TypeError):
         return 0.0
+
 
 
 def _clean_stock_code(raw_code: str | None) -> str:
@@ -108,6 +112,14 @@ def get_account_balance(qry_tp: str = "1", exchange: str = "KRX") -> dict:
                 stk_cd = _clean_stock_code(item.get("stk_cd"))
                 stk_nm = (item.get("stk_nm") or "").strip()
                 rmnd_qty = _parse_int(item.get("rmnd_qty"))
+                trde_able_qty = _parse_int(item.get("trde_able_qty"))
+                pur_pric = _parse_int(item.get("pur_pric"))
+                cur_prc = _parse_int(item.get("cur_prc"))
+                profit_rate = _parse_float(item.get("prft_rt"))
+
+                # 보정: 만약 profit_rate가 0.0인데 pur_pric과 cur_prc가 유효하게 존재하고 다를 때 계산값 활용
+                if profit_rate == 0.0 and pur_pric > 0 and cur_prc > 0 and cur_prc != pur_pric:
+                    profit_rate = round(((cur_prc - pur_pric) / pur_pric) * 100, 2)
 
                 # 보유수량이 0 이상인 실제 보유 종목만 필터링
                 if rmnd_qty > 0 or stk_nm:
@@ -115,12 +127,14 @@ def get_account_balance(qry_tp: str = "1", exchange: str = "KRX") -> dict:
                         "stock_code": stk_cd,
                         "stock_name": stk_nm,
                         "quantity": rmnd_qty,
-                        "purchase_price": _parse_int(item.get("pur_pric")),
-                        "current_price": _parse_int(item.get("cur_prc")),
-                        "profit_rate": _parse_float(item.get("prft_rt")),
+                        "tradable_quantity": trde_able_qty,
+                        "purchase_price": pur_pric,
+                        "current_price": cur_prc,
+                        "profit_rate": profit_rate,
                         "eval_profit": _parse_int(item.get("evltv_prft")),
                         "eval_amount": _parse_int(item.get("evlt_amt")),
                     })
+
 
             return {
                 "success": True,

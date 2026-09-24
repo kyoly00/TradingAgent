@@ -7,23 +7,43 @@ from .dispatcher import dispatch_command
 from .search import handle_search_command
 from .buy import handle_buy_command
 from .sell import handle_sell_command
+from .orders import handle_orders_command
+from .modify import handle_modify_command
+from .cancel import handle_cancel_command
 from .help import handle_help_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
 from .reservation import handle_rsv_command
+from .stop_loss import (
+    handle_tpr_command,
+    handle_slr_command,
+    handle_start_stls_command,
+    handle_stop_stls_command,
+    handle_stls_status_command,
+)
 
 __all__ = [
     "dispatch_command",
     "handle_search_command",
     "handle_buy_command",
     "handle_sell_command",
+    "handle_orders_command",
+    "handle_modify_command",
+    "handle_cancel_command",
     "handle_help_command",
     "handle_report_command",
     "handle_mkhr_command",
     "handle_stts_command",
     "handle_rsv_command",
+    "handle_tpr_command",
+    "handle_slr_command",
+    "handle_start_stls_command",
+    "handle_stop_stls_command",
+    "handle_stls_status_command",
 ]
+
+
 
 
 

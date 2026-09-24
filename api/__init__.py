@@ -5,7 +5,14 @@ OAuth2 인증, 시세 조회, 주문 등 기능(TR)별 API 모듈을 제공합�
 
 from .auth import request_access_token, session_manager, SessionManager
 from .stock_info import get_stock_info
-from .order import buy_stock, sell_stock
+from .order import (
+    buy_stock,
+    sell_stock,
+    get_orders,
+    modify_order,
+    cancel_order,
+    find_stock_code_by_ord_no,
+)
 from .account import get_account_balance
 
 __all__ = [
@@ -15,6 +22,10 @@ __all__ = [
     "get_stock_info",
     "buy_stock",
     "sell_stock",
+    "get_orders",
+    "modify_order",
+    "cancel_order",
+    "find_stock_code_by_ord_no",
     "get_account_balance",
 ]
 
