@@ -24,7 +24,9 @@ from .stop_loss import (
     handle_stop_stls_command,
     handle_stls_status_command,
 )
+from .rank import handle_rank_command
 from .help import handle_help_command
+
 
 
 
@@ -73,6 +75,12 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
     if cmd in ("srch", "search", "조회"):
         reply = handle_search_command(args)
         return reply, False
+
+    # 4-1. 상위 20개 종목 순위 조회 ('rank [번호]')
+    if cmd in ("rank", "순위", "랭킹"):
+        reply = handle_rank_command(args)
+        return reply, False
+
 
     # 5. 종목 매수 명령어 ('buy {종목코드} {수량} [지정가]')
     if cmd in ("buy", "매수"):
@@ -164,7 +172,9 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         "• `sell {종목코드} {수량} [지정가]` : 종목 매도 주문\n"
         "• `report` 또는 `r` : 계좌 자산 및 보유 종목 조회\n"
         "• `srch {종목코드}` : 종목 정보 조회\n"
+        "• `rank` [번호] : 상위 20개 순위 조회 (1:거래대금, 2:상승률, 3:거래량, 4:인기검색)\n"
         "• `rsv {시간} {명령어}` : 명령어 예약 실행 (매일 평일 반복)\n"
+
         "• `rsv once {시간} {명령어}` : 1회성 명령어 예약 실행\n"
         "• `rsv list` : 예약 목록 확인 | `rsv remove {번호}` : 예약 삭제\n"
         "• `mkhr {시작} {종료}` : 장 운영 시간 설정\n"

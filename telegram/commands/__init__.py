@@ -22,8 +22,10 @@ from .stop_loss import (
     handle_stop_stls_command,
     handle_stls_status_command,
 )
+from .rank import handle_rank_command
 
 __all__ = [
+
     "dispatch_command",
     "handle_search_command",
     "handle_buy_command",
@@ -41,7 +43,9 @@ __all__ = [
     "handle_start_stls_command",
     "handle_stop_stls_command",
     "handle_stls_status_command",
+    "handle_rank_command",
 ]
+
 
 
 

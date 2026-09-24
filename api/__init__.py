@@ -14,6 +14,12 @@ from .order import (
     find_stock_code_by_ord_no,
 )
 from .account import get_account_balance
+from .ranking import (
+    get_top_trading_value,
+    get_top_fluctuation_rate,
+    get_top_trading_volume,
+    get_top_search_rank,
+)
 
 __all__ = [
     "request_access_token",
@@ -27,7 +33,12 @@ __all__ = [
     "cancel_order",
     "find_stock_code_by_ord_no",
     "get_account_balance",
+    "get_top_trading_value",
+    "get_top_fluctuation_rate",
+    "get_top_trading_volume",
+    "get_top_search_rank",
 ]
+
 
 
 
