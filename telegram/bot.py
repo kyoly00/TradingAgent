@@ -11,8 +11,12 @@ from config.config import telegram_token, telegram_chat_id
 from utils.logger import log_telegram_in, log_telegram_out, log_info, log_error
 from utils.scheduler import token_scheduler
 from trading.stop_loss import stop_loss_watcher
+from trading.golden_cross import golden_cross_watcher
+from trading.dead_cross import dead_cross_watcher
 from .tel_send import send_telegram_message
 from .commands.dispatcher import dispatch_command
+from .commands.golden_cross import restore_golden_cross_watcher
+from .commands.dead_cross import restore_dead_cross_watcher
 
 
 
@@ -46,6 +50,10 @@ class TelegramBot:
         # 토큰 자동 갱신 스케줄러 가동
         token_scheduler.start()
 
+        # 저장된 설정이 활성화 상태이면 골든크로스 감시 루프 복구
+        restore_golden_cross_watcher(chat_id=self.default_chat_id)
+        restore_dead_cross_watcher(chat_id=self.default_chat_id)
+
         # 봇 시작 전 텔레그램 서버 큐에 남아있던 이전 미처리 메시지 정리(Flush)
         self._flush_pending_updates()
 
@@ -74,13 +82,15 @@ class TelegramBot:
             self.stop()
 
     def stop(self):
-        """봇 수신 루프 및 스케줄러, 스탑로스 감시 루프를 안전하게 중단합니다."""
+        """봇 수신 루프와 모든 백그라운드 감시 작업을 안전하게 중단합니다."""
         if not self.running:
             return
         self.running = False
         token_scheduler.stop()
         stop_loss_watcher.stop()
-        log_info("🔌 [텔레그램 봇] 수신 루프, 스케줄러 및 스탑로스 감시가 종료되었습니다.")
+        golden_cross_watcher.shutdown()
+        dead_cross_watcher.shutdown()
+        log_info("🔌 [텔레그램 봇] 수신 루프, 스케줄러 및 자동매매 감시가 종료되었습니다.")
 
 
     def _fetch_updates(self, timeout: int = 20) -> list[dict]:
@@ -130,6 +140,8 @@ class TelegramBot:
             {"command": "sell", "description": "주식 매도 주문 (시장가/지정가)"},
             {"command": "mkhr", "description": "장 운영 시간 설정 (예: /mkhr 9:30 15:00)"},
             {"command": "stts", "description": "전체 시스템 설정값 확인"},
+            {"command": "gdcrs", "description": "골든크로스 자동매수 설정 및 상태"},
+            {"command": "ddcrs", "description": "데드크로스 자동매도 상태"},
             {"command": "status", "description": "현재 로그인 모드 및 토큰 상태"},
             {"command": "login", "description": "키움 계정 로그인 (paper/real)"},
             {"command": "power", "description": "트레이딩 에이전트 안전 종료"},

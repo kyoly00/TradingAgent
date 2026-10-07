@@ -14,6 +14,16 @@ from .help import handle_help_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .golden_cross import (
+    handle_gdcrs_command,
+    handle_start_gdcrs_command,
+    handle_stop_gdcrs_command,
+)
+from .dead_cross import (
+    handle_ddcrs_status_command,
+    handle_start_ddcrs_command,
+    handle_stop_ddcrs_command,
+)
 from .reservation import handle_rsv_command
 from .stop_loss import (
     handle_tpr_command,
@@ -37,6 +47,12 @@ __all__ = [
     "handle_report_command",
     "handle_mkhr_command",
     "handle_stts_command",
+    "handle_gdcrs_command",
+    "handle_start_gdcrs_command",
+    "handle_stop_gdcrs_command",
+    "handle_ddcrs_status_command",
+    "handle_start_ddcrs_command",
+    "handle_stop_ddcrs_command",
     "handle_rsv_command",
     "handle_tpr_command",
     "handle_slr_command",
@@ -45,9 +61,6 @@ __all__ = [
     "handle_stls_status_command",
     "handle_rank_command",
 ]
-
-
-
 
 
 

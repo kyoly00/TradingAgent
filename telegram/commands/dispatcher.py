@@ -16,6 +16,16 @@ from .cancel import handle_cancel_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .golden_cross import (
+    handle_gdcrs_command,
+    handle_start_gdcrs_command,
+    handle_stop_gdcrs_command,
+)
+from .dead_cross import (
+    handle_ddcrs_status_command,
+    handle_start_ddcrs_command,
+    handle_stop_ddcrs_command,
+)
 from .reservation import handle_rsv_command
 from .stop_loss import (
     handle_tpr_command,
@@ -78,11 +88,14 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
 
     # 4-1. 상위 20개 종목 순위 조회 ('rank [번호]')
     if cmd in ("rank", "순위", "랭킹"):
-        reply = handle_rank_command(args)
+        reply = handle_rank_command(
+            args,
+            command_executor=lambda command: dispatch_command(command, chat_id=chat_id),
+        )
         return reply, False
 
 
-    # 5. 종목 매수 명령어 ('buy {종목코드} {수량} [지정가]')
+    # 5. 종목 매수 명령어 ('buy {종목코드} {수량} [지정가]', 'buy {종목코드} max {금액}')
     if cmd in ("buy", "매수"):
         reply = handle_buy_command(args)
         return reply, False
@@ -126,6 +139,22 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_stop_stls_command(args[1:])
         return reply, False
 
+    if cmd == "start" and args and args[0] in ("gdcrs", "골든크로스"):
+        reply = handle_start_gdcrs_command(args[1:], chat_id=chat_id)
+        return reply, False
+
+    if cmd == "stop" and args and args[0] in ("gdcrs", "골든크로스"):
+        reply = handle_stop_gdcrs_command(args[1:])
+        return reply, False
+
+    if cmd == "start" and args and args[0] in ("ddcrs", "데드크로스"):
+        reply = handle_start_ddcrs_command(args[1:], chat_id=chat_id)
+        return reply, False
+
+    if cmd == "stop" and args and args[0] in ("ddcrs", "데드크로스"):
+        reply = handle_stop_ddcrs_command(args[1:])
+        return reply, False
+
     # 13. 스탑로스 상태 및 조작 명령어 ('stls', 'stls start', 'stls stop')
     if cmd in ("stls", "스탑로스", "stoploss"):
         reply = handle_stls_status_command(args)
@@ -141,38 +170,54 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_slr_command(args)
         return reply, False
 
-    # 16. 전체 설정값 확인 명령어 ('stts')
+    # 16. 골든/데드크로스 설정 및 대상 종목 관리 ('gdcrs intv/add/list/remove/clear')
+    if cmd in ("gdcrs", "골든크로스"):
+        reply = handle_gdcrs_command(args)
+        return reply, False
+
+    if cmd in ("ddcrs", "데드크로스"):
+        reply = handle_ddcrs_status_command(args)
+        return reply, False
+
+    # 17. 전체 설정값 확인 명령어 ('stts')
     if cmd in ("stts", "settings", "설정"):
         reply = handle_stts_command(args)
         return reply, False
 
-    # 17. 명령어 예약 실행 ('rsv ...')
+    # 18. 명령어 예약 실행 ('rsv ...')
     if cmd in ("rsv", "예약"):
         reply = handle_rsv_command(args)
         return reply, False
 
-    # 18. 도움말 및 명령어 안내 ('help', 'command', 'commands', 'start', '도움말', '명령어')
+    # 19. 도움말 및 명령어 안내 ('help', 'command', 'commands', 'start', '도움말', '명령어')
     if cmd in ("help", "command", "commands", "cmd", "cmds", "start", "도움말", "명령어"):
         reply = handle_help_command(args)
         return reply, False
 
-    # 19. 알 수 없는 명령어
+    # 20. 알 수 없는 명령어
     unknown_text = (
         f"❓ 알 수 없는 명령어입니다: '{tokens[0]}'\n\n"
         "사용 가능한 명령어:\n"
         "• `start stls` [주기] : 스탑로스 실시간 감시 시작 (기본 10초 주기)\n"
         "• `stop stls` : 스탑로스 실시간 감시 중단\n"
         "• `stls` : 스탑로스 감시 현황 및 보유 종목 확인\n"
+        "• `start gdcrs` / `stop gdcrs` : 골든크로스 자동매수 감시 시작/중지\n"
+        "• `start ddcrs` / `stop ddcrs` : 보유 종목 데드크로스 자동매도 감시 시작/중지\n"
         "• `tpr {익절기준}` : 익절 기준 퍼센티지 설정 (예: tpr 5 -> +5% 도달 시 익절)\n"
         "• `slr {손절기준}` : 손절 기준 퍼센티지 설정 (예: slr 10 -> -10% 도달 시 손절)\n"
+        "• `gdcrs intv {단기} {장기}` : 골든/데드크로스 분봉 설정\n"
+        "• `gdcrs add/list/remove/clear` : 골든크로스 대상 종목 관리\n"
+        "• `ddcrs` : 데드크로스 자동매도 감시 상태 확인\n"
         "• `orders` [all] : 주문 체결/미체결 내역 확인\n"
         "• `modify {원주문번호} [수량] {단가}` : 주문 정정 (예: modify 0000139 71000)\n"
         "• `cancel {원주문번호} [수량]` : 주문 취소 (예: cancel 0000139)\n"
         "• `buy {종목코드} {수량} [지정가]` : 종목 매수 주문\n"
+        "• `buy {종목코드} max {금액}` : 예산 내 최대 수량 시장가 매수\n"
         "• `sell {종목코드} {수량} [지정가]` : 종목 매도 주문\n"
         "• `report` 또는 `r` : 계좌 자산 및 보유 종목 조회\n"
         "• `srch {종목코드}` : 종목 정보 조회\n"
         "• `rank` [번호] : 상위 20개 순위 조회 (1:거래대금, 2:상승률, 3:거래량, 4:인기검색)\n"
+        "• `rank {번호} cmd {개수} {명령}` : 순위 종목 대상으로 명령 실행\n"
         "• `rsv {시간} {명령어}` : 명령어 예약 실행 (매일 평일 반복)\n"
 
         "• `rsv once {시간} {명령어}` : 1회성 명령어 예약 실행\n"
@@ -187,5 +232,3 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         "• `/help` 또는 `/command` : 명령어 사용법 보기"
     )
     return unknown_text, False
-
-

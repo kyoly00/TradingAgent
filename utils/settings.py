@@ -38,6 +38,11 @@ def load_settings() -> dict:
         "reservations": [],
         "take_profit_rate": 5.0,
         "stop_loss_rate": -10.0,
+        "golden_cross_short_interval": 5,
+        "golden_cross_long_interval": 20,
+        "golden_cross_stocks": [],
+        "golden_cross_auto_trade_enabled": False,
+        "dead_cross_auto_trade_enabled": False,
     }
 
 
@@ -146,6 +151,198 @@ def set_market_hours(start_str: str, end_str: str) -> tuple[bool, str]:
         return True, f"{norm_start} ~ {norm_end}"
     else:
         return False, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def get_golden_cross_intervals() -> tuple[int, int]:
+    """골든/데드크로스 계산에 사용할 단기·장기 분봉값을 반환합니다."""
+    settings = load_settings()
+    short_interval = settings.get("golden_cross_short_interval", 5)
+    long_interval = settings.get("golden_cross_long_interval", 20)
+
+    try:
+        if isinstance(short_interval, bool) or not re.fullmatch(
+            r"[+-]?\d+", str(short_interval).strip()
+        ):
+            raise ValueError
+        short_value = int(short_interval)
+        if not 1 <= short_value <= 60:
+            short_value = 5
+    except (TypeError, ValueError):
+        short_value = 5
+
+    try:
+        if isinstance(long_interval, bool) or not re.fullmatch(
+            r"[+-]?\d+", str(long_interval).strip()
+        ):
+            raise ValueError
+        long_value = int(long_interval)
+        if not 1 <= long_value <= 60:
+            long_value = 20
+    except (TypeError, ValueError):
+        long_value = 20
+
+    return short_value, long_value
+
+
+def set_golden_cross_intervals(
+    short_interval: str | int,
+    long_interval: str | int,
+) -> tuple[bool, int, int, str]:
+    """
+    골든/데드크로스 계산용 단기·장기 분봉값을 검증하고 함께 저장합니다.
+
+    두 값은 각각 1~60 사이의 정수여야 합니다.
+    """
+    try:
+        if isinstance(short_interval, bool) or not re.fullmatch(
+            r"[+-]?\d+", str(short_interval).strip()
+        ):
+            raise ValueError
+        short_value = int(short_interval)
+    except (TypeError, ValueError):
+        return False, 0, 0, f"단기 분봉값은 1~60 사이의 정수여야 합니다: '{short_interval}'"
+
+    try:
+        if isinstance(long_interval, bool) or not re.fullmatch(
+            r"[+-]?\d+", str(long_interval).strip()
+        ):
+            raise ValueError
+        long_value = int(long_interval)
+    except (TypeError, ValueError):
+        return False, 0, 0, f"장기 분봉값은 1~60 사이의 정수여야 합니다: '{long_interval}'"
+
+    if not 1 <= short_value <= 60:
+        return False, 0, 0, f"단기 분봉값은 1~60 사이여야 합니다: {short_value}"
+    if not 1 <= long_value <= 60:
+        return False, 0, 0, f"장기 분봉값은 1~60 사이여야 합니다: {long_value}"
+
+    settings = load_settings()
+    settings["golden_cross_short_interval"] = short_value
+    settings["golden_cross_long_interval"] = long_value
+
+    if save_settings(settings):
+        return True, short_value, long_value, "설정이 저장되었습니다."
+    return False, short_value, long_value, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def _normalize_golden_cross_stocks(stocks: object) -> list[dict]:
+    """설정에서 읽은 골든크로스 종목 목록을 검증·정규화합니다."""
+    if not isinstance(stocks, list):
+        return []
+
+    normalized_stocks = []
+    for item in stocks:
+        if not isinstance(item, dict):
+            continue
+        stock_code = str(item.get("stock_code", "")).strip()
+        amount = item.get("amount")
+        if not stock_code.isdigit() or len(stock_code) != 6:
+            continue
+        if isinstance(amount, bool):
+            continue
+        try:
+            amount_value = int(amount)
+        except (TypeError, ValueError):
+            continue
+        if amount_value <= 0:
+            continue
+        normalized_stocks.append({"stock_code": stock_code, "amount": amount_value})
+
+    return normalized_stocks
+
+
+def get_golden_cross_stocks() -> list[dict]:
+    """등록 순서를 유지한 골든크로스 대상 종목 목록을 반환합니다."""
+    settings = load_settings()
+    return _normalize_golden_cross_stocks(settings.get("golden_cross_stocks", []))
+
+
+def get_golden_cross_auto_trade_enabled() -> bool:
+    """골든크로스 자동매수 활성화 설정을 반환합니다."""
+    return bool(get_setting("golden_cross_auto_trade_enabled", False))
+
+
+def set_golden_cross_auto_trade_enabled(enabled: bool) -> bool:
+    """골든크로스 자동매수 활성화 설정을 저장합니다."""
+    return set_setting("golden_cross_auto_trade_enabled", bool(enabled))
+
+
+def get_dead_cross_auto_trade_enabled() -> bool:
+    """데드크로스 자동매도 활성화 설정을 반환합니다."""
+    return bool(get_setting("dead_cross_auto_trade_enabled", False))
+
+
+def set_dead_cross_auto_trade_enabled(enabled: bool) -> bool:
+    """데드크로스 자동매도 활성화 설정을 저장합니다."""
+    return set_setting("dead_cross_auto_trade_enabled", bool(enabled))
+
+
+def add_golden_cross_stock(
+    stock_code: str,
+    amount: str | int,
+) -> tuple[bool, dict | None, str]:
+    """골든크로스 대상 종목과 매수 금액을 목록 끝에 추가합니다."""
+    clean_code = str(stock_code).strip()
+    if not clean_code.isdigit() or len(clean_code) != 6:
+        return False, None, "종목코드는 6자리 숫자로 입력해 주세요."
+
+    if isinstance(amount, bool):
+        return False, None, "금액은 0원보다 큰 정수로 입력해 주세요."
+
+    clean_amount = str(amount).strip()
+    if not re.fullmatch(r"(?:\d+|\d{1,3}(?:,\d{3})+)", clean_amount):
+        return False, None, "금액은 0원보다 큰 정수로 입력해 주세요."
+
+    amount_value = int(clean_amount.replace(",", ""))
+    if amount_value <= 0:
+        return False, None, "금액은 0원보다 큰 정수로 입력해 주세요."
+
+    settings = load_settings()
+    stocks = _normalize_golden_cross_stocks(settings.get("golden_cross_stocks", []))
+    if any(item["stock_code"] == clean_code for item in stocks):
+        return False, None, f"이미 등록된 종목입니다: {clean_code}"
+    new_item = {"stock_code": clean_code, "amount": amount_value}
+    stocks.append(new_item)
+    settings["golden_cross_stocks"] = stocks
+
+    if save_settings(settings):
+        return True, new_item, "종목이 추가되었습니다."
+    return False, None, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def remove_golden_cross_stock(list_number: str | int) -> tuple[bool, dict | None, str]:
+    """조회 목록의 1부터 시작하는 번호에 해당하는 종목을 삭제합니다."""
+    if isinstance(list_number, bool) or not re.fullmatch(
+        r"\d+", str(list_number).strip()
+    ):
+        return False, None, "삭제할 번호는 1 이상의 정수로 입력해 주세요."
+
+    number = int(list_number)
+    settings = load_settings()
+    stocks = _normalize_golden_cross_stocks(settings.get("golden_cross_stocks", []))
+    if not stocks:
+        return False, None, "목록에 등록된 종목이 없습니다."
+    if number < 1 or number > len(stocks):
+        return False, None, f"목록 번호는 1~{len(stocks)} 사이여야 합니다."
+
+    removed_item = stocks.pop(number - 1)
+    settings["golden_cross_stocks"] = stocks
+
+    if save_settings(settings):
+        return True, removed_item, "종목이 삭제되었습니다."
+    return False, None, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def clear_golden_cross_stocks() -> tuple[bool, int, str]:
+    """골든크로스 대상 종목 목록을 모두 삭제합니다."""
+    settings = load_settings()
+    stocks = _normalize_golden_cross_stocks(settings.get("golden_cross_stocks", []))
+    removed_count = len(stocks)
+    settings["golden_cross_stocks"] = []
+
+    if save_settings(settings):
+        return True, removed_count, "종목 목록을 비웠습니다."
+    return False, removed_count, "설정 파일 저장 중 오류가 발생했습니다."
 
 
 def get_reservations() -> list[dict]:
@@ -314,5 +511,3 @@ def set_stop_loss_rate(rate_input: float | str) -> tuple[bool, float, str]:
         return True, neg_rate, f"{neg_rate:g}%"
     else:
         return False, neg_rate, "설정 파일 저장 중 오류가 발생했습니다."
-
-

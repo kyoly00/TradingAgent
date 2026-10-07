@@ -5,6 +5,7 @@ OAuth2 인증, 시세 조회, 주문 등 기능(TR)별 API 모듈을 제공합�
 
 from .auth import request_access_token, session_manager, SessionManager
 from .stock_info import get_stock_info
+from .minute_chart import get_minute_chart
 from .order import (
     buy_stock,
     sell_stock,
@@ -26,6 +27,7 @@ __all__ = [
     "session_manager",
     "SessionManager",
     "get_stock_info",
+    "get_minute_chart",
     "buy_stock",
     "sell_stock",
     "get_orders",
@@ -38,7 +40,6 @@ __all__ = [
     "get_top_trading_volume",
     "get_top_search_rank",
 ]
-
 
 
 
