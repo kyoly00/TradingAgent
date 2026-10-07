@@ -2,6 +2,7 @@ AI 에이전트 주식 자동매매 프롬프트 모음.md
 logs/
 tr_docs/
 data/
+examples/
 
 # 파이썬 컴파일 파일 (이미 지우고 계신 것)
 **/__pycache__/
