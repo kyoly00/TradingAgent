@@ -16,6 +16,11 @@ from .cancel import handle_cancel_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .trailing_stop import (
+    handle_start_trst_command,
+    handle_stop_trst_command,
+    handle_trst_command,
+)
 from .golden_cross import (
     handle_gdcrs_command,
     handle_start_gdcrs_command,
@@ -155,6 +160,14 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_stop_ddcrs_command(args[1:])
         return reply, False
 
+    if cmd == "start" and args and args[0] in ("trst", "트레일링스탑"):
+        reply = handle_start_trst_command(args[1:], chat_id=chat_id)
+        return reply, False
+
+    if cmd == "stop" and args and args[0] in ("trst", "트레일링스탑"):
+        reply = handle_stop_trst_command(args[1:])
+        return reply, False
+
     # 13. 스탑로스 상태 및 조작 명령어 ('stls', 'stls start', 'stls stop')
     if cmd in ("stls", "스탑로스", "stoploss"):
         reply = handle_stls_status_command(args)
@@ -170,7 +183,12 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_slr_command(args)
         return reply, False
 
-    # 16. 골든/데드크로스 설정 및 대상 종목 관리 ('gdcrs intv/add/list/remove/clear')
+    # 16. 트레일링 스탑 기준 설정 ('trst {고점대비하락률} {최소발동수익률}')
+    if cmd in ("trst", "트레일링스탑"):
+        reply = handle_trst_command(args)
+        return reply, False
+
+    # 17. 골든/데드크로스 설정 및 대상 종목 관리 ('gdcrs intv/add/list/remove/clear')
     if cmd in ("gdcrs", "골든크로스"):
         reply = handle_gdcrs_command(args)
         return reply, False
@@ -179,7 +197,7 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_ddcrs_status_command(args)
         return reply, False
 
-    # 17. 전체 설정값 확인 명령어 ('stts')
+    # 18. 전체 설정값 확인 명령어 ('stts')
     if cmd in ("stts", "settings", "설정"):
         reply = handle_stts_command(args)
         return reply, False
@@ -203,8 +221,10 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         "• `stls` : 스탑로스 감시 현황 및 보유 종목 확인\n"
         "• `start gdcrs` / `stop gdcrs` : 골든크로스 자동매수 감시 시작/중지\n"
         "• `start ddcrs` / `stop ddcrs` : 보유 종목 데드크로스 자동매도 감시 시작/중지\n"
+        "• `start trst` / `stop trst` : 보유 종목 트레일링 스탑 자동매도 시작/중지\n"
         "• `tpr {익절기준}` : 익절 기준 퍼센티지 설정 (예: tpr 5 -> +5% 도달 시 익절)\n"
         "• `slr {손절기준}` : 손절 기준 퍼센티지 설정 (예: slr 10 -> -10% 도달 시 손절)\n"
+        "• `trst {고점대비하락률} {최소발동수익률}` : 트레일링 스탑 기준 설정\n"
         "• `gdcrs intv {단기} {장기}` : 골든/데드크로스 분봉 설정\n"
         "• `gdcrs add/list/remove/clear` : 골든크로스 대상 종목 관리\n"
         "• `ddcrs` : 데드크로스 자동매도 감시 상태 확인\n"

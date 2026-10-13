@@ -14,6 +14,11 @@ from .help import handle_help_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .trailing_stop import (
+    handle_start_trst_command,
+    handle_stop_trst_command,
+    handle_trst_command,
+)
 from .golden_cross import (
     handle_gdcrs_command,
     handle_start_gdcrs_command,
@@ -47,6 +52,9 @@ __all__ = [
     "handle_report_command",
     "handle_mkhr_command",
     "handle_stts_command",
+    "handle_trst_command",
+    "handle_start_trst_command",
+    "handle_stop_trst_command",
     "handle_gdcrs_command",
     "handle_start_gdcrs_command",
     "handle_stop_gdcrs_command",
@@ -61,8 +69,6 @@ __all__ = [
     "handle_stls_status_command",
     "handle_rank_command",
 ]
-
-
 
 
 

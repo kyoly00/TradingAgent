@@ -4,8 +4,8 @@ tr_docs/kt00018.json 명세를 기반으로 계좌평가잔고내역(kt00018)을
 총매입금액, 총평가금액, 총평가손익, 총수익률, 추정예탁자산 및 보유 종목 잔고 리스트를 반환합니다.
 """
 
-import requests
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error, log_info
 
 TR_ID_KT00018 = "kt00018"
@@ -96,7 +96,7 @@ def get_account_balance(qry_tp: str = "1", exchange: str = "KRX") -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")

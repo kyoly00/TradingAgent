@@ -11,6 +11,9 @@ __all__ = [
     "golden_cross_watcher",
     "DeadCrossWatcher",
     "dead_cross_watcher",
+    "TrailingStopWatcher",
+    "TrailingStockState",
+    "trailing_stop_watcher",
 ]
 
 
@@ -45,5 +48,21 @@ def __getattr__(name: str):
         return {
             "DeadCrossWatcher": DeadCrossWatcher,
             "dead_cross_watcher": dead_cross_watcher,
+        }[name]
+    if name in (
+        "TrailingStopWatcher",
+        "TrailingStockState",
+        "trailing_stop_watcher",
+    ):
+        from .trailing_stop import (
+            TrailingStockState,
+            TrailingStopWatcher,
+            trailing_stop_watcher,
+        )
+
+        return {
+            "TrailingStopWatcher": TrailingStopWatcher,
+            "TrailingStockState": TrailingStockState,
+            "trailing_stop_watcher": trailing_stop_watcher,
         }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

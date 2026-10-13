@@ -39,6 +39,9 @@ def get_general_help_text() -> str:
         "• `stls` : 현재 스탑로스 감시 상태 및 감시 대상 종목 현황 확인\n"
         "• `tpr {익절기준}` : 익절 기준 퍼센티지 설정 (예: `tpr 5` -> +5% 도달 시 시장가 익절)\n"
         "• `slr {손절기준}` : 손절 기준 퍼센티지 설정 (예: `slr 10` -> -10% 도달 시 시장가 손절)\n"
+        "• `trst {고점대비하락률} {최소발동수익률}` : 트레일링 스탑 기준 설정\n"
+        "  └ 예: `trst 3.5 5`\n"
+        "• `start trst` / `stop trst` : 보유 종목 트레일링 스탑 자동매도 시작/중지\n"
         "• `gdcrs intv {단기} {장기}` : 골든/데드크로스 분봉 설정\n"
         "  └ 예: `gdcrs intv 5 20` (1분봉 종가 기준 단기/장기 MA 주기)\n"
         "• `gdcrs add/list/remove/clear` : 골든크로스 대상 종목 관리\n"
@@ -64,7 +67,7 @@ def get_general_help_text() -> str:
         "• `status` : 현재 로그인 모드, 토큰 유효 시간, 스케줄러 상태 확인\n"
         "• `help {명령어}` : 특정 명령어의 상세 설명 보기 (예: `help tpr`, `help slr`, `help orders`)\n"
         "• `power off` : 트레이딩 에이전트 프로그램 안전 종료\n\n"
-        "💡 모든 명령어는 `/` 접두사(예: `/help`, `/tpr`, `/slr`, `/gdcrs`, `/ddcrs`, `/orders`, `/modify`, `/cancel`, `/rsv`, `/r`, `/mkhr`, `/stts`)를 붙이거나 생략해도 동일하게 동작합니다."
+        "💡 모든 명령어는 `/` 접두사(예: `/help`, `/tpr`, `/slr`, `/trst`, `/gdcrs`, `/ddcrs`, `/orders`, `/modify`, `/cancel`, `/rsv`, `/r`, `/mkhr`, `/stts`)를 붙이거나 생략해도 동일하게 동작합니다."
     )
 
 
@@ -254,6 +257,21 @@ def get_command_detail_help(target: str) -> str:
             "  - `slr 5.5` (-5.5% 도달 시 손절 매도)\n"
             "  - `slr -10` (-10 입력 시에도 자동으로 -10% 음수 전환 저장)\n"
             "• 기본값: -10.0% (손실률 -10.0% 도달 시 손절)\n"
+            "• 저장 위치: `config/data/settings.json`"
+        )
+    elif cmd in ("trst", "트레일링스탑"):
+        return (
+            "📉 [트레일링 스탑 설정 (trst) 상세 사용법]\n\n"
+            "• 설정 형식: `trst {고점대비하락률} {최소발동수익률}`\n"
+            "• 현재값 조회: `trst`\n"
+            "• 자동매도 시작/중지: `start trst` / `stop trst`\n"
+            "• 사용 예시: `trst 3.5 5`\n"
+            "  - 수익률이 5% 이상일 때 트레일링 스탑 발동 가능\n"
+            "  - 이후 고점 대비 3.5% 하락을 매도 기준으로 사용\n"
+            "• 대상: 계좌 보유 종목 (10초마다 잔고 동기화)\n"
+            "• 시세: 공용 WebSocket 엔진의 실시간 체결 데이터\n"
+            "• 주문: 조건 충족 시 최신 매매가능수량 전부를 시장가 매도\n"
+            "• 허용값: 각각 0보다 큰 숫자, 소수 입력 가능\n"
             "• 저장 위치: `config/data/settings.json`"
         )
     elif cmd in ("gdcrs", "골든크로스"):

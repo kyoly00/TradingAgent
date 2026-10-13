@@ -6,6 +6,7 @@ config/data/settings.json 파일을 읽고 쓰며,
 
 import os
 import json
+import math
 import re
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +39,9 @@ def load_settings() -> dict:
         "reservations": [],
         "take_profit_rate": 5.0,
         "stop_loss_rate": -10.0,
+        "trailing_stop_drop_rate": 3.5,
+        "trailing_stop_min_profit_rate": 5.0,
+        "trailing_stop_auto_trade_enabled": False,
         "golden_cross_short_interval": 5,
         "golden_cross_long_interval": 20,
         "golden_cross_stocks": [],
@@ -438,6 +442,76 @@ def remove_all_reservations() -> tuple[bool, str, int]:
         return True, f"모든 예약 명령(총 {count}건)이 삭제되었습니다.", count
     else:
         return False, "설정 파일 저장 중 오류가 발생했습니다.", 0
+
+
+def get_trailing_stop_settings() -> tuple[float, float]:
+    """트레일링 스탑의 고점 대비 하락률과 최소 발동 수익률을 반환합니다."""
+    settings = load_settings()
+
+    def normalize(value: object, default: float) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(number) or number <= 0:
+            return default
+        return number
+
+    drop_rate = normalize(settings.get("trailing_stop_drop_rate"), 3.5)
+    min_profit_rate = normalize(
+        settings.get("trailing_stop_min_profit_rate"),
+        5.0,
+    )
+    return drop_rate, min_profit_rate
+
+
+def set_trailing_stop_settings(
+    drop_rate_input: float | str,
+    min_profit_rate_input: float | str,
+) -> tuple[bool, float, float, str]:
+    """트레일링 스탑의 두 퍼센트 설정을 검증하고 원자적으로 저장합니다."""
+
+    def parse_positive_rate(value: float | str, label: str) -> tuple[float | None, str]:
+        if isinstance(value, bool):
+            return None, f"{label}은 0보다 큰 숫자로 입력해 주세요."
+        try:
+            number = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None, f"{label}은 0보다 큰 숫자로 입력해 주세요: '{value}'"
+        if not math.isfinite(number) or number <= 0:
+            return None, f"{label}은 0보다 큰 유한한 숫자여야 합니다."
+        rounded = round(number, 2)
+        if rounded <= 0:
+            return None, f"{label}은 소수점 둘째 자리 기준으로 0보다 커야 합니다."
+        return rounded, ""
+
+    drop_rate, error = parse_positive_rate(drop_rate_input, "고점 대비 하락률")
+    if drop_rate is None:
+        return False, 0.0, 0.0, error
+
+    min_profit_rate, error = parse_positive_rate(
+        min_profit_rate_input,
+        "최소 발동 수익률",
+    )
+    if min_profit_rate is None:
+        return False, 0.0, 0.0, error
+
+    settings = load_settings()
+    settings["trailing_stop_drop_rate"] = drop_rate
+    settings["trailing_stop_min_profit_rate"] = min_profit_rate
+    if save_settings(settings):
+        return True, drop_rate, min_profit_rate, "설정이 저장되었습니다."
+    return False, drop_rate, min_profit_rate, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def get_trailing_stop_auto_trade_enabled() -> bool:
+    """트레일링 스탑 자동매도 활성화 설정을 반환합니다."""
+    return bool(get_setting("trailing_stop_auto_trade_enabled", False))
+
+
+def set_trailing_stop_auto_trade_enabled(enabled: bool) -> bool:
+    """트레일링 스탑 자동매도 활성화 설정을 저장합니다."""
+    return set_setting("trailing_stop_auto_trade_enabled", bool(enabled))
 
 
 def get_take_profit_rate() -> float:

@@ -7,7 +7,6 @@ TR 명세(tr_docs/au10001.json)를 기반으로 모의투자 및 실전투자용
 import os
 import sys
 from datetime import datetime
-import requests
 from dotenv import load_dotenv
 
 # .env 환경 변수 로드
@@ -18,6 +17,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
+from api.http_queue import http_client
 from config.config import (
     paper_host_url,
     paper_app_key,
@@ -78,7 +78,7 @@ def request_access_token(host: str, app_key: str, app_secret: str) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=params, timeout=10)
+        response = http_client.post(url, headers=headers, json=params, timeout=10)
         body = response.json()
 
         token = body.get("token")

@@ -4,8 +4,8 @@ tr_docs/kt10000.json 명세를 기반으로 국내주식 매수 주문(kt10000)�
 시장가(trde_tp='3') 및 지정가(trde_tp='0') 매수를 지원합니다.
 """
 
-import requests
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error, log_info
 
 TR_ID_KT10000 = "kt10000"
@@ -92,7 +92,7 @@ def buy_stock(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -218,7 +218,7 @@ def sell_stock(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -353,7 +353,7 @@ def get_orders(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -511,7 +511,7 @@ def modify_order(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -631,7 +631,7 @@ def cancel_order(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -678,5 +678,4 @@ def cancel_order(
             "message": f"네트워크 또는 API 호출 오류: {str(e)}",
             "raw_data": {},
         }
-
 

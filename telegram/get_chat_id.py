@@ -3,12 +3,19 @@
 config/config.py의 telegram_token을 사용하여 최신 수신 메시지로부터 chat_id를 조회하고 출력합니다.
 """
 
-import requests
+import os
+import sys
+
 from dotenv import load_dotenv
 
 # .env 환경 변수 로드 (config 모듈 임포트 전 적용)
 load_dotenv()
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from api.http_queue import http_client
 from config.config import telegram_token
 
 
@@ -24,7 +31,7 @@ def get_latest_chat_id() -> int | None:
     url = f"https://api.telegram.org/bot{telegram_token}/getUpdates"
 
     try:
-        response = requests.get(url, timeout=10)
+        response = http_client.get(url, timeout=10)
         data = response.json()
 
         if not data.get("ok"):

@@ -126,6 +126,7 @@ class KiwoomRealtimeClient:
         on_tick: TickCallback,
         stop_event: threading.Event,
         should_continue: Callable[[], bool],
+        on_connected: Callable[[], None] | None = None,
     ):
         """로그인·구독 후 중단 또는 장 종료까지 실시간 데이터를 수신합니다."""
         if websocket is None:
@@ -144,6 +145,8 @@ class KiwoomRealtimeClient:
             self._send_json({"trnm": "LOGIN", "token": session_manager.token})
             self._receive_login(stop_event)
             self._subscribe(stock_codes)
+            if on_connected is not None:
+                on_connected()
             log_info(f"[0B WebSocket 구독 시작] 종목 수: {len(stock_codes)}개")
 
             while not stop_event.is_set() and should_continue():

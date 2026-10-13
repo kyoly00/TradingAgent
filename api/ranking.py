@@ -7,8 +7,8 @@
 4. ka00198: 실시간 종목조회(인기검색) 순위 요청
 """
 
-import requests
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error, log_info
 
 TR_ID_KA10032 = "ka10032"  # 거래대금상위
@@ -96,7 +96,7 @@ def get_top_trading_value(limit: int = 20) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
         return_code = data.get("return_code")
         return_msg = data.get("return_msg", "")
@@ -170,7 +170,7 @@ def get_top_fluctuation_rate(limit: int = 20) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
         return_code = data.get("return_code")
         return_msg = data.get("return_msg", "")
@@ -238,7 +238,7 @@ def get_top_trading_volume(limit: int = 20) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
         return_code = data.get("return_code")
         return_msg = data.get("return_msg", "")
@@ -305,7 +305,7 @@ def get_top_search_rank(limit: int = 20) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
         return_code = data.get("return_code")
         return_msg = data.get("return_msg", "")

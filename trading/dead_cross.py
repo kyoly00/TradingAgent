@@ -7,7 +7,7 @@ from datetime import datetime
 from api.account import get_account_balance
 from api.auth import session_manager
 from api.minute_chart import get_minute_chart
-from realtime.kiwoom_websocket import KiwoomRealtimeClient
+from realtime.engine import realtime_engine
 from trading.golden_cross import MovingAverageCrossDetector
 from utils.logger import log_error, log_info
 from utils.settings import (
@@ -23,12 +23,13 @@ Notifier = Callable[[str], None]
 class DeadCrossWatcher:
     """장 시간 동안 보유 종목의 데드크로스를 감지해 전량 자동매도합니다."""
 
+    SUBSCRIBER_ID = "dead_cross"
+
     def __init__(self):
         self._is_running = False
         self._session_active = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        self._client: KiwoomRealtimeClient | None = None
         self._detectors: dict[str, MovingAverageCrossDetector] = {}
         self._holdings: dict[str, dict] = {}
         self._ordered_on_date: dict[str, str] = {}
@@ -96,9 +97,7 @@ class DeadCrossWatcher:
         was_running = self._is_running
         self._is_running = False
         self._stop_event.set()
-        current_client = self._client
-        if current_client is not None:
-            current_client.close()
+        realtime_engine.unsubscribe(self.SUBSCRIBER_ID)
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5)
         self._thread = None
@@ -213,22 +212,22 @@ class DeadCrossWatcher:
                     self._stop_event.wait(10)
                     continue
 
-                self._client = KiwoomRealtimeClient(group_number="2")
-                self._session_active = True
-                self._client.run(
+                realtime_engine.subscribe(
+                    subscriber_id=self.SUBSCRIBER_ID,
                     stock_codes=stock_codes,
-                    on_tick=self._handle_tick,
-                    stop_event=self._stop_event,
-                    should_continue=self._is_market_open,
+                    callback=self._handle_tick,
                 )
+                self._session_active = True
+                while not self._stop_event.is_set() and self._is_market_open():
+                    self._stop_event.wait(1)
             except Exception as exc:
                 if not self._stop_event.is_set():
                     self._last_error = str(exc)
                     log_error(f"[데드크로스 감시 세션 오류] {exc}")
                     self._stop_event.wait(10)
             finally:
+                realtime_engine.unsubscribe(self.SUBSCRIBER_ID)
                 self._session_active = False
-                self._client = None
 
         log_info("[데드크로스 루프] 감시 스레드 정상 종료")
 
