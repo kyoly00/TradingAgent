@@ -35,6 +35,7 @@ def get_general_help_text() -> str:
         "  └ 예: `buy 005930 max 1000000 tick 2`\n"
         "• `sell {종목코드} {수량} [지정가]` (시장가/지정가 매도)\n"
         "  └ 예: `sell 005930 10` (시장가), `sell 005930 10 72000` (지정가)\n"
+        "• `sell all` (모든 보유 종목의 주문 가능 수량 시장가 매도)\n"
         "• `orders` [all | 종목코드] (주문 체결/미체결 내역 조회)\n"
         "  └ 예: `orders` (미체결 주문), `orders all` (당일 전체), `orders 005930`\n"
         "• `modify {원주문번호} [수량] {단가}` (주문 정정)\n"
@@ -44,6 +45,10 @@ def get_general_help_text() -> str:
         "• `ccl pend` (현재 미체결 주문 전체 취소)\n\n"
         "• `time {초} cancel|market` (매수 미체결 후속 처리 설정)\n"
         "  └ 예: `time 10 cancel`, `time 10 market`, `time 0 cancel`\n\n"
+        "• `cooldown {시간}` (매도 종목 재매수 제한)\n"
+        "  └ 예: `cooldown 24`, `cooldown 0`\n\n"
+        "• `mxhold {개수}` (최대 보유 종목 수 제한)\n"
+        "  └ 예: `mxhold 5`, `mxhold 0`\n\n"
         "🎯 **4. 스탑로스 자동 감시 및 설정 (익절 / 손절)**\n"
         "• `start stls` [주기] : 스탑로스 실시간 감시 시작 (기본 10초 주기, 예: `start stls 10`)\n"
         "• `stop stls` : 스탑로스 실시간 감시 안전 중단\n"
@@ -78,7 +83,7 @@ def get_general_help_text() -> str:
         "• `status` : 현재 로그인 모드, 토큰 유효 시간, 스케줄러 상태 확인\n"
         "• `help {명령어}` : 특정 명령어의 상세 설명 보기 (예: `help tpr`, `help slr`, `help orders`)\n"
         "• `power off` : 트레이딩 에이전트 프로그램 안전 종료\n\n"
-        "💡 모든 명령어는 `/` 접두사(예: `/help`, `/cond`, `/jggs`, `/tpr`, `/slr`, `/trst`, `/gdcrs`, `/ddcrs`, `/orders`, `/modify`, `/cancel`, `/ccl`, `/time`, `/rsv`, `/r`, `/mkhr`, `/stts`)를 붙이거나 생략해도 동일하게 동작합니다."
+        "💡 모든 명령어는 `/` 접두사(예: `/help`, `/cond`, `/jggs`, `/tpr`, `/slr`, `/trst`, `/gdcrs`, `/ddcrs`, `/orders`, `/modify`, `/cancel`, `/ccl`, `/time`, `/cooldown`, `/mxhold`, `/rsv`, `/r`, `/mkhr`, `/stts`)를 붙이거나 생략해도 동일하게 동작합니다."
     )
 
 
@@ -151,7 +156,8 @@ def get_command_detail_help(target: str) -> str:
         return (
             "🚫 [주식 주문 취소 (cancel) 상세 사용법]\n\n"
             "• 전체 취소: `ccl pend`\n"
-            "  └ 현재 미체결 주문을 조회한 뒤 모든 주문의 잔량 전체를 취소합니다.\n\n"
+            "  └ 잔량이 1주 이상인 주문만 조회하여 순차적으로 취소합니다.\n"
+            "  └ 유량 제한(1700)으로 거절되면 간격을 두고 최대 2회 재시도합니다.\n\n"
             "• 기본 형식: `cancel {원주문번호} [취소수량]`\n"
             "• 종목코드는 입력하지 않아도 당일 주문 내역에서 **자동으로 찾아 처리**합니다.\n"
             "• 사용 예시:\n"
@@ -168,7 +174,7 @@ def get_command_detail_help(target: str) -> str:
             "• 표시 정보:\n"
             "  1. 전체 자금 현황: 추정예탁자산, 총매입금액, 총평가금액, 총평가손익, 총수익률\n"
             "  2. 보유 종목 리스트: 종목번호, 종목명, 보유수량, 매입가, 현재가, 수익률\n"
-            "  3. 미체결 주문: 주문번호, 종목, 매도/매수, 주문유형, 주문/체결/잔량, 주문단가"
+            "  3. 미체결 주문: 잔량이 1주 이상인 주문의 번호, 종목, 주문유형, 체결/잔량, 주문단가"
         )
     elif cmd in ("srch", "search", "조회"):
         return (
@@ -202,10 +208,14 @@ def get_command_detail_help(target: str) -> str:
     elif cmd in ("sell", "매도"):
         return (
             "💰 [주식 매도 주문 (sell) 상세 사용법]\n\n"
-            "• 1. 시장가 매도:\n"
+            "• 1. 전체 시장가 매도:\n"
+            "  형식: `sell all`\n"
+            "  안내: 모든 보유 종목의 주문 가능 수량을 각각 시장가로 매도합니다.\n"
+            "  일부 주문이 실패해도 나머지 종목의 매도 주문은 계속 진행합니다.\n\n"
+            "• 2. 시장가 매도:\n"
             "  형식: `sell {종목코드} {수량}`\n"
             "  예시: `sell 005930 10` (삼성전자 10주 시장가 매도)\n\n"
-            "• 2. 지정가 매도:\n"
+            "• 3. 지정가 매도:\n"
             "  형식: `sell {종목코드} {수량} {단가}`\n"
             "  예시: `sell 005930 10 72000` (삼성전자 10주 72,000원 지정가 매도)"
         )
@@ -324,6 +334,28 @@ def get_command_detail_help(target: str) -> str:
             "• 비활성화: `time 0 cancel` 또는 `time 0 market`\n"
             "• 현재 설정 조회: `time`\n"
             "• 설정 변경 시 이미 대기 중이던 후속 처리 작업은 중단됩니다."
+        )
+    elif cmd == "cooldown":
+        return (
+            "🕒 [매도 종목 재매수 쿨다운 상세 사용법]\n\n"
+            "• 설정: `cooldown {시간}`\n"
+            "• 예시: `cooldown 24` (매도 후 24시간 동안 해당 종목 매수 차단)\n"
+            "• 비활성화: `cooldown 0`\n"
+            "• 현재 설정 조회: `cooldown`\n"
+            "• 시장가 매도 성공 시 즉시 적용됩니다.\n"
+            "• 지정가 또는 외부 매도는 장중 보유수량 감소가 확인되면 적용됩니다.\n"
+            "• 일반 매수, 최대금액, 호가 지정, 자동매수 등 모든 매수 경로에 적용됩니다."
+        )
+    elif cmd == "mxhold":
+        return (
+            "📦 [최대 보유 종목 수 상세 사용법]\n\n"
+            "• 설정: `mxhold {개수}`\n"
+            "• 예시: `mxhold 5` (보유 종목을 최대 5개로 제한)\n"
+            "• 비활성화: `mxhold 0`\n"
+            "• 현재 설정 조회: `mxhold`\n"
+            "• 한도에 도달하면 새로운 종목 매수만 차단됩니다.\n"
+            "• 이미 보유 중인 종목의 추가 매수는 허용됩니다.\n"
+            "• 수동 및 자동매수를 포함한 모든 매수 경로에 적용됩니다."
         )
     elif cmd in ("gdcrs", "골든크로스"):
         return (

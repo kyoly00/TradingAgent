@@ -22,6 +22,8 @@ from .trailing_stop import (
     handle_trst_command,
 )
 from .order_timeout import handle_time_command
+from .cooldown import handle_cooldown_command
+from .max_holdings import handle_mxhold_command
 from .golden_cross import (
     handle_gdcrs_command,
     handle_start_gdcrs_command,
@@ -61,6 +63,8 @@ __all__ = [
     "handle_start_trst_command",
     "handle_stop_trst_command",
     "handle_time_command",
+    "handle_cooldown_command",
+    "handle_mxhold_command",
     "handle_gdcrs_command",
     "handle_start_gdcrs_command",
     "handle_stop_gdcrs_command",
@@ -75,5 +79,3 @@ __all__ = [
     "handle_stls_status_command",
     "handle_rank_command",
 ]
-
-

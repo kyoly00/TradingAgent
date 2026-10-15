@@ -169,6 +169,8 @@ class TelegramBot:
             {"command": "sell", "description": "주식 매도 주문 (시장가/지정가)"},
             {"command": "ccl", "description": "미체결 주문 전체 취소 (ccl pend)"},
             {"command": "time", "description": "매수 미체결 후속 처리 시간 설정"},
+            {"command": "cooldown", "description": "매도 종목 재매수 제한 시간 설정"},
+            {"command": "mxhold", "description": "최대 보유 종목 수 설정"},
             {"command": "mkhr", "description": "장 운영 시간 설정 (예: /mkhr 9:30 15:00)"},
             {"command": "stts", "description": "전체 시스템 설정값 확인"},
             {"command": "trst", "description": "트레일링 스탑 설정 및 자동매도"},
