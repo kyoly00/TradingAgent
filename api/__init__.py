@@ -6,6 +6,7 @@ OAuth2 인증, 시세 조회, 주문 등 기능(TR)별 API 모듈을 제공합�
 from .auth import request_access_token, session_manager, SessionManager
 from .http_queue import HttpRequestQueue, http_client
 from .stock_info import get_stock_info
+from .order_book import get_order_book
 from .minute_chart import get_minute_chart
 from .order import (
     buy_stock,
@@ -30,6 +31,7 @@ __all__ = [
     "HttpRequestQueue",
     "http_client",
     "get_stock_info",
+    "get_order_book",
     "get_minute_chart",
     "buy_stock",
     "sell_stock",
@@ -43,6 +45,5 @@ __all__ = [
     "get_top_trading_volume",
     "get_top_search_rank",
 ]
-
 
 

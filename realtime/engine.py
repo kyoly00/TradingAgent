@@ -24,6 +24,16 @@ class _Subscription:
     worker: threading.Thread | None = None
 
 
+@dataclass
+class _WebSocketRequest:
+    payload: dict
+    expected_trnm: str
+    completed: threading.Event = field(default_factory=threading.Event)
+    response: dict | None = None
+    error: str | None = None
+    sent: bool = False
+
+
 class SharedRealtimeEngine:
     """구독 종목을 통합하고 단일 WebSocket의 틱을 각 기능에 분배합니다."""
 
@@ -32,6 +42,7 @@ class SharedRealtimeEngine:
             lambda: KiwoomRealtimeClient(group_number="1")
         )
         self._subscriptions: dict[str, _Subscription] = {}
+        self._requests: list[_WebSocketRequest] = []
         self._condition = threading.Condition()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -39,6 +50,40 @@ class SharedRealtimeEngine:
         self._client: KiwoomRealtimeClient | None = None
         self._connected = False
         self._last_error: str | None = None
+
+    def request(
+        self,
+        payload: dict,
+        expected_trnm: str,
+        timeout: float = 10.0,
+    ) -> dict:
+        """공용 연결로 WebSocket TR을 전송하고 지정한 TR 응답을 기다립니다."""
+        if not isinstance(payload, dict) or not payload:
+            raise ValueError("WebSocket 요청 payload가 비어 있습니다.")
+        normalized_trnm = str(expected_trnm).strip()
+        if not normalized_trnm:
+            raise ValueError("응답 TR명이 비어 있습니다.")
+        if timeout <= 0:
+            raise ValueError("응답 대기 시간은 0보다 커야 합니다.")
+
+        request = _WebSocketRequest(dict(payload), normalized_trnm)
+        with self._condition:
+            self._requests.append(request)
+            self._ensure_thread_locked()
+            self._condition.notify_all()
+
+        if not request.completed.wait(timeout):
+            with self._condition:
+                if request in self._requests:
+                    self._requests.remove(request)
+            raise TimeoutError(
+                f"WebSocket TR 응답 시간이 초과되었습니다: {normalized_trnm}"
+            )
+        if request.error:
+            raise RuntimeError(request.error)
+        if request.response is None:
+            raise RuntimeError(f"WebSocket TR 응답이 비어 있습니다: {normalized_trnm}")
+        return request.response
 
     def subscribe(
         self,
@@ -80,7 +125,11 @@ class SharedRealtimeEngine:
                 previous.stock_codes = normalized_codes
                 previous.callback = callback
             codes_changed = previous_codes != normalized_codes
-            should_refresh = codes_changed and (previous is not None or had_subscriptions)
+            should_refresh = codes_changed and (
+                previous is not None
+                or had_subscriptions
+                or self._client is not None
+            )
             self._ensure_thread_locked()
             self._condition.notify_all()
 
@@ -123,15 +172,41 @@ class SharedRealtimeEngine:
                 combined.update(subscription.stock_codes)
         return sorted(combined)
 
-    def _has_subscriptions(self) -> bool:
+    def _has_work(self) -> bool:
         with self._condition:
-            return bool(self._subscriptions)
+            return bool(self._subscriptions or self._requests)
+
+    def _take_outbound_requests(self) -> list[dict]:
+        with self._condition:
+            pending = [request for request in self._requests if not request.sent]
+            for request in pending:
+                request.sent = True
+        return [dict(request.payload) for request in pending]
+
+    def _handle_message(self, message: dict):
+        response_trnm = str(message.get("trnm") or "").strip()
+        if not response_trnm:
+            return
+        matched: _WebSocketRequest | None = None
+        with self._condition:
+            for request in self._requests:
+                if request.sent and request.expected_trnm == response_trnm:
+                    matched = request
+                    request.response = message
+                    self._requests.remove(request)
+                    break
+        if matched is not None:
+            matched.completed.set()
 
     def _run_loop(self):
         log_info("[공용 WebSocket 엔진] 실행 스레드 시작")
         while not self._stop_event.is_set():
             with self._condition:
-                while not self._subscriptions and not self._stop_event.is_set():
+                while (
+                    not self._subscriptions
+                    and not self._requests
+                    and not self._stop_event.is_set()
+                ):
                     self._connected = False
                     self._condition.wait()
                 if self._stop_event.is_set():
@@ -139,8 +214,6 @@ class SharedRealtimeEngine:
 
             self._refresh_event.clear()
             stock_codes = self._get_combined_stock_codes()
-            if not stock_codes:
-                continue
 
             client = self._client_factory()
             self._client = client
@@ -152,10 +225,12 @@ class SharedRealtimeEngine:
                     on_tick=self._dispatch_tick,
                     stop_event=self._stop_event,
                     should_continue=lambda: (
-                        self._has_subscriptions()
+                        self._has_work()
                         and not self._refresh_event.is_set()
                     ),
                     on_connected=self._mark_connected,
+                    outbound_provider=self._take_outbound_requests,
+                    on_message=self._handle_message,
                 )
                 self._last_error = None
             except Exception as exc:
@@ -166,6 +241,9 @@ class SharedRealtimeEngine:
             finally:
                 self._connected = False
                 self._client = None
+                with self._condition:
+                    for request in self._requests:
+                        request.sent = False
 
         self._connected = False
         log_info("[공용 WebSocket 엔진] 실행 스레드 종료")
@@ -208,6 +286,7 @@ class SharedRealtimeEngine:
                 subscriber_id: sorted(subscription.stock_codes)
                 for subscriber_id, subscription in self._subscriptions.items()
             }
+            pending_request_count = len(self._requests)
         combined_codes = sorted(
             {code for stock_codes in subscribers.values() for code in stock_codes}
         )
@@ -218,6 +297,7 @@ class SharedRealtimeEngine:
             "subscribers": subscribers,
             "stock_codes": combined_codes,
             "stock_count": len(combined_codes),
+            "pending_request_count": pending_request_count,
             "last_error": self._last_error,
         }
 
@@ -227,11 +307,16 @@ class SharedRealtimeEngine:
         self._refresh_event.set()
         with self._condition:
             subscriptions = list(self._subscriptions.values())
+            requests = list(self._requests)
             self._subscriptions.clear()
+            self._requests.clear()
             self._condition.notify_all()
         for subscription in subscriptions:
             subscription.active = False
             subscription.tick_queue.put(None)
+        for request in requests:
+            request.error = "공용 WebSocket 엔진이 종료되었습니다."
+            request.completed.set()
         current_client = self._client
         if current_client is not None:
             current_client.close()

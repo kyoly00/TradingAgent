@@ -14,6 +14,8 @@ from utils.settings import (
     get_trailing_stop_settings,
     get_golden_cross_intervals,
     get_golden_cross_stocks,
+    get_condition_command_mappings,
+    get_buy_order_timeout_settings,
 )
 
 
@@ -40,10 +42,19 @@ def handle_stts_command(args: list[str] | None = None) -> str:
     trailing_drop_rate, trailing_min_profit_rate = get_trailing_stop_settings()
     short_interval, long_interval = get_golden_cross_intervals()
     golden_cross_stocks = get_golden_cross_stocks()
+    condition_command_mappings = get_condition_command_mappings()
+    buy_timeout_seconds, buy_timeout_action = get_buy_order_timeout_settings()
     golden_cross_status = golden_cross_watcher.get_status()
     dead_cross_status = dead_cross_watcher.get_status()
     trailing_stop_status = trailing_stop_watcher.get_status()
     realtime_status = realtime_engine.get_status()
+
+    if buy_timeout_seconds == 0:
+        buy_timeout_state = "비활성화"
+    elif buy_timeout_action == "cancel":
+        buy_timeout_state = f"{buy_timeout_seconds}초 후 미체결 잔량 취소"
+    else:
+        buy_timeout_state = f"{buy_timeout_seconds}초마다 호가 상향 후 시장가 전환"
 
     # 스탑로스 워처 가동 상태 확인
     stls_status = stop_loss_watcher.get_status()
@@ -100,6 +111,9 @@ def handle_stts_command(args: list[str] | None = None) -> str:
         f"• 📈 골든/데드크로스 MA: 단기 {short_interval}개 / 장기 {long_interval}개 "
         f"(설정: `gdcrs intv {short_interval} {long_interval}`)",
         f"• 📋 골든크로스 대상 종목: {len(golden_cross_stocks)}개 (조회: `gdcrs list`)",
+        f"• 🧩 조건검색식 명령 배정: {len(condition_command_mappings)}개 (조회: `jggs list`)",
+        f"• ⏱️ 매수 미체결 후속 처리: {buy_timeout_state} "
+        f"(설정: `time {buy_timeout_seconds} {buy_timeout_action}`)",
         f"• 🤖 골든크로스 자동매수: {golden_cross_state}",
         f"• 📉 데드크로스 자동매도: {dead_cross_state}",
         f"• 🔌 공용 WebSocket: {realtime_state} "

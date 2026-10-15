@@ -8,6 +8,7 @@ Telegram Bot API의 getUpdates를 활용한 Long Polling 방식으로
 import time
 import requests
 from api.http_queue import http_client
+from api.auth import session_manager
 from config.config import telegram_token, telegram_chat_id
 from utils.logger import log_telegram_in, log_telegram_out, log_info, log_error
 from utils.scheduler import token_scheduler
@@ -15,6 +16,8 @@ from trading.stop_loss import stop_loss_watcher
 from trading.golden_cross import golden_cross_watcher
 from trading.dead_cross import dead_cross_watcher
 from trading.trailing_stop import trailing_stop_watcher
+from trading.holdings_monitor import holdings_change_watcher
+from trading.buy_order_follow_up import buy_order_follow_up_manager
 from realtime.engine import realtime_engine
 from .tel_send import send_telegram_message
 from .commands.dispatcher import dispatch_command
@@ -54,6 +57,21 @@ class TelegramBot:
         # 토큰 자동 갱신 스케줄러 가동
         token_scheduler.start()
 
+        # 장중 보유 종목 매수·매도 변경 감시 가동
+        holdings_change_watcher.configure(
+            notifier=lambda message: send_telegram_message(
+                message,
+                chat_id=session_manager.last_chat_id or self.default_chat_id,
+            )
+        )
+        holdings_change_watcher.start()
+        buy_order_follow_up_manager.configure(
+            notifier=lambda message: send_telegram_message(
+                message,
+                chat_id=session_manager.last_chat_id or self.default_chat_id,
+            )
+        )
+
         # 저장된 설정이 활성화 상태이면 골든크로스 감시 루프 복구
         restore_golden_cross_watcher(chat_id=self.default_chat_id)
         restore_dead_cross_watcher(chat_id=self.default_chat_id)
@@ -92,6 +110,8 @@ class TelegramBot:
             return
         self.running = False
         token_scheduler.stop()
+        holdings_change_watcher.stop()
+        buy_order_follow_up_manager.shutdown()
         stop_loss_watcher.stop()
         golden_cross_watcher.shutdown()
         dead_cross_watcher.shutdown()
@@ -141,10 +161,14 @@ class TelegramBot:
         commands = [
             {"command": "help", "description": "전체 명령어 사용법 및 도움말"},
             {"command": "rsv", "description": "명령어 예약 (예: /rsv 10:00 buy 005930 5)"},
-            {"command": "report", "description": "계좌 자산 및 보유 종목 잔고 조회"},
+            {"command": "report", "description": "계좌 자산, 보유 종목 및 미체결 주문 조회"},
             {"command": "srch", "description": "종목 정보 조회 (예: /srch 005930)"},
+            {"command": "cond", "description": "HTS 조건검색식 목록 조회"},
+            {"command": "jggs", "description": "조건검색식별 명령 배정 목록 관리"},
             {"command": "buy", "description": "주식 매수 주문 (시장가/지정가)"},
             {"command": "sell", "description": "주식 매도 주문 (시장가/지정가)"},
+            {"command": "ccl", "description": "미체결 주문 전체 취소 (ccl pend)"},
+            {"command": "time", "description": "매수 미체결 후속 처리 시간 설정"},
             {"command": "mkhr", "description": "장 운영 시간 설정 (예: /mkhr 9:30 15:00)"},
             {"command": "stts", "description": "전체 시스템 설정값 확인"},
             {"command": "trst", "description": "트레일링 스탑 설정 및 자동매도"},

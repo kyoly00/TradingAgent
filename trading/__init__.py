@@ -14,6 +14,13 @@ __all__ = [
     "TrailingStopWatcher",
     "TrailingStockState",
     "trailing_stop_watcher",
+    "HoldingsChangeWatcher",
+    "HoldingSnapshot",
+    "holdings_change_watcher",
+    "BuyOrderFollowUpManager",
+    "TrackedBuyOrder",
+    "buy_order_follow_up_manager",
+    "submit_buy_order",
 ]
 
 
@@ -64,5 +71,40 @@ def __getattr__(name: str):
             "TrailingStopWatcher": TrailingStopWatcher,
             "TrailingStockState": TrailingStockState,
             "trailing_stop_watcher": trailing_stop_watcher,
+        }[name]
+    if name in (
+        "HoldingsChangeWatcher",
+        "HoldingSnapshot",
+        "holdings_change_watcher",
+    ):
+        from .holdings_monitor import (
+            HoldingSnapshot,
+            HoldingsChangeWatcher,
+            holdings_change_watcher,
+        )
+
+        return {
+            "HoldingsChangeWatcher": HoldingsChangeWatcher,
+            "HoldingSnapshot": HoldingSnapshot,
+            "holdings_change_watcher": holdings_change_watcher,
+        }[name]
+    if name in (
+        "BuyOrderFollowUpManager",
+        "TrackedBuyOrder",
+        "buy_order_follow_up_manager",
+        "submit_buy_order",
+    ):
+        from .buy_order_follow_up import (
+            BuyOrderFollowUpManager,
+            TrackedBuyOrder,
+            buy_order_follow_up_manager,
+            submit_buy_order,
+        )
+
+        return {
+            "BuyOrderFollowUpManager": BuyOrderFollowUpManager,
+            "TrackedBuyOrder": TrackedBuyOrder,
+            "buy_order_follow_up_manager": buy_order_follow_up_manager,
+            "submit_buy_order": submit_buy_order,
         }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -2,7 +2,7 @@
 
 from telegram.tel_send import send_telegram_message
 from trading.trailing_stop import trailing_stop_watcher
-from utils.logger import log_error, log_info
+from utils.logger import log_error
 from utils.settings import (
     get_trailing_stop_auto_trade_enabled,
     get_trailing_stop_settings,
@@ -31,9 +31,7 @@ def restore_trailing_stop_watcher(chat_id: int | str | None = None):
         return
     configure_trailing_stop_watcher(chat_id=chat_id)
     success, message = trailing_stop_watcher.start(persist=False)
-    if success:
-        log_info(f"[트레일링 스탑 자동 복구] {message}")
-    else:
+    if not success:
         log_error(f"[트레일링 스탑 자동 복구 실패] {message}")
 
 

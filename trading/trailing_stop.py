@@ -109,10 +109,6 @@ class TrailingStopWatcher:
             daemon=True,
         )
         self._thread.start()
-        log_info(
-            f"[트레일링 스탑 시작] 고점 대비 하락률: {self._drop_rate:g}%, "
-            f"최소 발동 수익률: {self._min_profit_rate:g}%"
-        )
         return True, (
             "🚀 트레일링 스탑 감시가 활성화되었습니다. "
             f"(고점 대비 {self._drop_rate:g}% / 최소 수익률 {self._min_profit_rate:g}%)"
@@ -140,7 +136,6 @@ class TrailingStopWatcher:
                 "비활성화 설정을 저장하지 못했습니다."
             )
         if was_running:
-            log_info("[트레일링 스탑 중단] 공용 WebSocket 구독을 해제했습니다.")
             return True, "🛑 트레일링 스탑 감시를 중단했습니다."
         return False, "ℹ️ 트레일링 스탑 감시가 실행 중이지 않습니다."
 
@@ -254,7 +249,6 @@ class TrailingStopWatcher:
             self._states = {}
 
     def _run_loop(self):
-        log_info("[트레일링 스탑 루프] 감시 스레드 진입")
         while not self._stop_event.is_set():
             if not self._is_market_open():
                 self._clear_market_session()
@@ -288,7 +282,6 @@ class TrailingStopWatcher:
             self._clear_market_session()
 
         self._clear_market_session()
-        log_info("[트레일링 스탑 루프] 감시 스레드 정상 종료")
 
     def _get_current_sell_quantity(
         self,
@@ -311,10 +304,6 @@ class TrailingStopWatcher:
         return 0, None, "현재 계좌에서 해당 보유 종목을 찾을 수 없습니다."
 
     def _handle_tick(self, stock_code: str, timestamp: datetime, price: int):
-        print(
-            f"[TRST 0B] {timestamp.strftime('%H:%M:%S')} {stock_code} {price:,}원",
-            flush=True,
-        )
         self._last_tick_at = timestamp.strftime("%Y-%m-%d %H:%M:%S")
         if not self._is_running or self._stop_event.is_set() or price <= 0:
             return
@@ -419,10 +408,12 @@ class TrailingStopWatcher:
             f"• 매도 수량: {quantity:,}주 (매매가능수량 전부)\n\n"
             f"{order_message}"
         )
-        log_info(
-            f"[트레일링 스탑 신호] {display_name}, 고점 {signal['peak_price']:,}원, "
-            f"현재가 {signal['current_price']:,}원, 하락률 {signal['drawdown_rate']:.2f}%"
-        )
+        if success:
+            log_info(
+                f"[트레일링 스탑 매도 완료] {display_name}, {quantity:,}주, "
+                f"고점 {signal['peak_price']:,}원, 현재가 {signal['current_price']:,}원, "
+                f"하락률 {signal['drawdown_rate']:.2f}%"
+            )
         if self._notifier is not None:
             try:
                 self._notifier(notification)
