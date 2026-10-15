@@ -20,10 +20,11 @@ from trading.holdings_monitor import holdings_change_watcher
 from trading.buy_order_follow_up import buy_order_follow_up_manager
 from realtime.engine import realtime_engine
 from .tel_send import send_telegram_message
-from .commands.dispatcher import dispatch_command
+from .commands.dispatcher import dispatch_command, is_supported_command_text
 from .commands.golden_cross import restore_golden_cross_watcher
 from .commands.dead_cross import restore_dead_cross_watcher
 from .commands.trailing_stop import restore_trailing_stop_watcher
+from .natural_language import natural_language_command_coordinator
 
 
 
@@ -117,6 +118,7 @@ class TelegramBot:
         dead_cross_watcher.shutdown()
         trailing_stop_watcher.shutdown()
         realtime_engine.shutdown()
+        natural_language_command_coordinator.clear()
         log_info("🔌 [텔레그램 봇] 수신 루프, 스케줄러 및 자동매매 감시가 종료되었습니다.")
 
 
@@ -258,15 +260,42 @@ class TelegramBot:
         # 1. 수신 로그 기록 (시각, 입출력 구분, 채팅방 ID, 메시지 내용)
         log_telegram_in(chat_id=chat_id, text=text, sender_name=sender_name)
 
-        # 2. 명령어 파싱 및 실행
-        reply_message, should_exit = dispatch_command(raw_text=text, chat_id=chat_id)
+        # 2. 확인 대기 중이면 y에서만 실행하고, 그 외 입력은 취소합니다.
+        if natural_language_command_coordinator.has_pending(chat_id):
+            reply_message, should_exit = (
+                natural_language_command_coordinator.resolve_confirmation(
+                    chat_id=chat_id,
+                    answer=text,
+                    command_executor=lambda command: dispatch_command(
+                        raw_text=command,
+                        chat_id=chat_id,
+                    ),
+                )
+            )
+        # 3. 프로그램 명령어는 기존 디스패처로 즉시 실행합니다.
+        elif is_supported_command_text(text):
+            reply_message, should_exit = dispatch_command(
+                raw_text=text,
+                chat_id=chat_id,
+            )
+        # 4. 명령어가 아닌 텍스트는 Google AI로 변환하고 실행 확인을 요청합니다.
+        else:
+            reply_message = natural_language_command_coordinator.request_confirmation(
+                chat_id=chat_id,
+                natural_text=text,
+                command_validator=is_supported_command_text,
+            )
+            should_exit = False
 
-        # 3. 응답 메시지 발송 및 발신 로그 기록
+        # 5. 응답 메시지 발송 및 발신 로그 기록
         if reply_message:
             send_success = send_telegram_message(reply_message, chat_id=chat_id)
             log_telegram_out(chat_id=chat_id, text=reply_message, success=send_success)
+            if not send_success:
+                # 확인 안내를 받지 못한 사용자가 이후 y만 보내 실행하는 상황을 방지합니다.
+                natural_language_command_coordinator.cancel_pending(chat_id)
 
-        # 4. 종료 명령어('power off')인 경우 루프 종료 플래그 반환
+        # 6. 종료 명령어('power off')인 경우 루프 종료 플래그 반환
         if should_exit:
             log_info(f"종료 명령어('power off')가 수신되어 시스템을 종료합니다. (요청자 ChatID: {chat_id})")
             # 텔레그램 서버에 이 종료 메시지 수신 완료(offset 갱신)를 즉시 통보하여 재시작 시 재실행 방지

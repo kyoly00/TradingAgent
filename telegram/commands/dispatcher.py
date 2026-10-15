@@ -48,6 +48,89 @@ from .rank import handle_rank_command
 from .help import handle_help_command
 
 
+SUPPORTED_COMMANDS = frozenset(
+    {
+        "power",
+        "login",
+        "status",
+        "상태",
+        "srch",
+        "search",
+        "조회",
+        "cond",
+        "조건식",
+        "조건검색",
+        "jggs",
+        "rank",
+        "순위",
+        "랭킹",
+        "buy",
+        "매수",
+        "sell",
+        "매도",
+        "orders",
+        "order",
+        "주문",
+        "주문확인",
+        "미체결",
+        "modify",
+        "정정",
+        "변경",
+        "cancel",
+        "ccl",
+        "취소",
+        "report",
+        "r",
+        "리포트",
+        "잔고",
+        "자산",
+        "mkhr",
+        "장시간",
+        "start",
+        "stop",
+        "stls",
+        "스탑로스",
+        "stoploss",
+        "tpr",
+        "익절",
+        "slr",
+        "손절",
+        "trst",
+        "트레일링스탑",
+        "time",
+        "cooldown",
+        "mxhold",
+        "gdcrs",
+        "골든크로스",
+        "ddcrs",
+        "데드크로스",
+        "stts",
+        "settings",
+        "설정",
+        "rsv",
+        "예약",
+        "help",
+        "command",
+        "commands",
+        "cmd",
+        "cmds",
+        "도움말",
+        "명령어",
+    }
+)
+
+
+def is_supported_command_text(raw_text: str) -> bool:
+    """텍스트의 첫 토큰이 현재 디스패처가 인식하는 명령인지 확인합니다."""
+    normalized = str(raw_text or "").strip().lower()
+    if not normalized:
+        return False
+    first_token = normalized.split(maxsplit=1)[0]
+    if first_token.startswith("/"):
+        first_token = first_token[1:]
+    return bool(first_token) and first_token in SUPPORTED_COMMANDS
+
+
 
 
 def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[str, bool]:
