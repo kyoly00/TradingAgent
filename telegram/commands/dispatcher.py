@@ -48,6 +48,73 @@ from .rank import handle_rank_command
 from .help import handle_help_command
 
 
+SUPPORTED_COMMANDS = frozenset(
+    {
+        "power", "login", "status", "상태", "srch", "search", "조회",
+        "cond", "조건식", "조건검색", "jggs", "rank", "순위", "랭킹",
+        "buy", "매수", "sell", "매도", "orders", "order", "주문",
+        "주문확인", "미체결", "modify", "정정", "변경", "cancel", "ccl",
+        "취소", "report", "r", "리포트", "잔고", "자산", "mkhr", "장시간",
+        "start", "stop", "stls", "스탑로스", "stoploss", "tpr", "익절",
+        "slr", "손절", "trst", "트레일링스탑", "time", "cooldown",
+        "mxhold", "gdcrs", "골든크로스", "ddcrs", "데드크로스", "stts",
+        "settings", "설정", "rsv", "예약", "help", "command", "commands",
+        "cmd", "cmds", "도움말", "명령어",
+    }
+)
+
+
+def is_supported_command_text(raw_text: str) -> bool:
+    """문장의 첫 토큰이 현재 라우터가 지원하는 명령인지 확인합니다."""
+    if not raw_text or not raw_text.strip():
+        return False
+    command = raw_text.strip().split(maxsplit=1)[0].lower()
+    if command.startswith("/"):
+        command = command[1:]
+    return command in SUPPORTED_COMMANDS
+
+
+def is_explicit_command_text(raw_text: str) -> bool:
+    """입력이 명령 형식을 의도한 것인지 판별해 문장형 별칭 오인을 방지합니다."""
+    if not raw_text or not raw_text.strip():
+        return False
+    normalized = raw_text.strip()
+    if normalized.startswith("/"):
+        return is_supported_command_text(normalized)
+
+    tokens = normalized.lower().split()
+    command = tokens[0]
+    if command not in SUPPORTED_COMMANDS:
+        return False
+
+    korean_aliases = {
+        "상태", "조회", "조건식", "조건검색", "순위", "랭킹", "매수", "매도",
+        "주문", "주문확인", "미체결", "정정", "변경", "취소", "리포트", "잔고",
+        "자산", "장시간", "스탑로스", "익절", "손절", "트레일링스탑",
+        "골든크로스", "데드크로스", "설정", "예약", "도움말", "명령어",
+    }
+    if command not in korean_aliases:
+        return True
+    if len(tokens) == 1:
+        return True
+
+    if command in {"매수", "매도", "조회"}:
+        return len(tokens) >= 2 and len(tokens[1]) == 6 and tokens[1].isdigit()
+    if command in {"순위", "랭킹"}:
+        return tokens[1].isdigit()
+    if command in {"익절", "손절"}:
+        try:
+            float(tokens[1])
+            return len(tokens) == 2
+        except ValueError:
+            return False
+    if command in {"골든크로스", "데드크로스", "스탑로스", "트레일링스탑"}:
+        return tokens[1] in {"add", "list", "remove", "clear", "intv", "status"}
+    if command in {"도움말", "명령어"}:
+        return len(tokens) <= 2
+    return False
+
+
 
 
 def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[str, bool]:

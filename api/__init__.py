@@ -1,6 +1,6 @@
 """
 키움증권 REST API 연동 패키지:
-OAuth2 인증, 시세 조회, 주문 등 기능(TR)별 API 모듈을 제공합니다.
+OAuth2 인증, 시세 조회, 주문 등 기능(TR)별 API 모듈과 외부 AI API 통신 모듈을 제공합니다.
 """
 
 from .auth import request_access_token, session_manager, SessionManager
@@ -17,6 +17,7 @@ from .order import (
     find_stock_code_by_ord_no,
 )
 from .account import get_account_balance
+from .google_ai import convert_natural_language_to_commands
 from .ranking import (
     get_top_trading_value,
     get_top_fluctuation_rate,
@@ -40,10 +41,10 @@ __all__ = [
     "cancel_order",
     "find_stock_code_by_ord_no",
     "get_account_balance",
+    "convert_natural_language_to_commands",
     "get_top_trading_value",
     "get_top_fluctuation_rate",
     "get_top_trading_volume",
     "get_top_search_rank",
 ]
-
 
