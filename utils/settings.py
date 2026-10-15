@@ -6,6 +6,7 @@ config/data/settings.json 파일을 읽고 쓰며,
 
 import os
 import json
+import math
 import re
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,11 +39,17 @@ def load_settings() -> dict:
         "reservations": [],
         "take_profit_rate": 5.0,
         "stop_loss_rate": -10.0,
+        "trailing_stop_drop_rate": 3.5,
+        "trailing_stop_min_profit_rate": 5.0,
+        "trailing_stop_auto_trade_enabled": False,
         "golden_cross_short_interval": 5,
         "golden_cross_long_interval": 20,
         "golden_cross_stocks": [],
         "golden_cross_auto_trade_enabled": False,
         "dead_cross_auto_trade_enabled": False,
+        "condition_command_mappings": [],
+        "buy_order_timeout_seconds": 0,
+        "buy_order_timeout_action": "cancel",
     }
 
 
@@ -345,6 +352,103 @@ def clear_golden_cross_stocks() -> tuple[bool, int, str]:
     return False, removed_count, "설정 파일 저장 중 오류가 발생했습니다."
 
 
+def _normalize_condition_command_mappings(mappings: object) -> list[dict]:
+    """설정에서 읽은 조건검색식 명령 배정 목록을 검증·정규화합니다."""
+    if not isinstance(mappings, list):
+        return []
+
+    normalized_mappings = []
+    for item in mappings:
+        if not isinstance(item, dict):
+            continue
+        condition_seq = str(item.get("condition_seq", "")).strip()
+        command = str(item.get("command", "")).strip()
+        if not re.fullmatch(r"\d{1,3}", condition_seq) or not command:
+            continue
+        normalized_mappings.append(
+            {"condition_seq": condition_seq, "command": command}
+        )
+    return normalized_mappings
+
+
+def get_condition_command_mappings() -> list[dict]:
+    """등록 순서를 유지한 조건검색식 명령 배정 목록을 반환합니다."""
+    settings = load_settings()
+    return _normalize_condition_command_mappings(
+        settings.get("condition_command_mappings", [])
+    )
+
+
+def add_condition_command_mapping(
+    condition_seq: str | int,
+    command: str,
+) -> tuple[bool, dict | None, str]:
+    """조건검색식 일련번호와 실행할 명령 템플릿을 목록 끝에 추가합니다."""
+    if isinstance(condition_seq, bool) or not re.fullmatch(
+        r"\d{1,3}", str(condition_seq).strip()
+    ):
+        return False, None, "조건식 번호는 0~999 사이의 정수로 입력해 주세요."
+
+    clean_command = str(command).strip()
+    if not clean_command:
+        return False, None, "배정할 명령어를 입력해 주세요."
+
+    settings = load_settings()
+    mappings = _normalize_condition_command_mappings(
+        settings.get("condition_command_mappings", [])
+    )
+    new_item = {
+        "condition_seq": str(condition_seq).strip(),
+        "command": clean_command,
+    }
+    mappings.append(new_item)
+    settings["condition_command_mappings"] = mappings
+
+    if save_settings(settings):
+        return True, new_item, "조건검색식 명령 배정이 추가되었습니다."
+    return False, None, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def remove_condition_command_mapping(
+    list_number: str | int,
+) -> tuple[bool, dict | None, str]:
+    """조회 시 표시되는 1부터 시작하는 번호의 명령 배정을 삭제합니다."""
+    if isinstance(list_number, bool) or not re.fullmatch(
+        r"\d+", str(list_number).strip()
+    ):
+        return False, None, "삭제할 일련번호는 1 이상의 정수로 입력해 주세요."
+
+    number = int(list_number)
+    settings = load_settings()
+    mappings = _normalize_condition_command_mappings(
+        settings.get("condition_command_mappings", [])
+    )
+    if not mappings:
+        return False, None, "목록에 등록된 명령 배정이 없습니다."
+    if number < 1 or number > len(mappings):
+        return False, None, f"목록 일련번호는 1~{len(mappings)} 사이여야 합니다."
+
+    removed_item = mappings.pop(number - 1)
+    settings["condition_command_mappings"] = mappings
+    if save_settings(settings):
+        return True, removed_item, "조건검색식 명령 배정이 삭제되었습니다."
+    return False, None, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def clear_condition_command_mappings() -> tuple[bool, int, str]:
+    """조건검색식 명령 배정 목록을 모두 삭제합니다."""
+    settings = load_settings()
+    mappings = _normalize_condition_command_mappings(
+        settings.get("condition_command_mappings", [])
+    )
+    removed_count = len(mappings)
+    settings["condition_command_mappings"] = []
+
+    if save_settings(settings):
+        return True, removed_count, "조건검색식 명령 배정 목록을 비웠습니다."
+    return False, removed_count, "설정 파일 저장 중 오류가 발생했습니다."
+
+
 def get_reservations() -> list[dict]:
     """현재 등록된 예약 명령 목록을 반환합니다."""
     return get_setting("reservations", [])
@@ -438,6 +542,116 @@ def remove_all_reservations() -> tuple[bool, str, int]:
         return True, f"모든 예약 명령(총 {count}건)이 삭제되었습니다.", count
     else:
         return False, "설정 파일 저장 중 오류가 발생했습니다.", 0
+
+
+def get_trailing_stop_settings() -> tuple[float, float]:
+    """트레일링 스탑의 고점 대비 하락률과 최소 발동 수익률을 반환합니다."""
+    settings = load_settings()
+
+    def normalize(value: object, default: float) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(number) or number <= 0:
+            return default
+        return number
+
+    drop_rate = normalize(settings.get("trailing_stop_drop_rate"), 3.5)
+    min_profit_rate = normalize(
+        settings.get("trailing_stop_min_profit_rate"),
+        5.0,
+    )
+    return drop_rate, min_profit_rate
+
+
+def set_trailing_stop_settings(
+    drop_rate_input: float | str,
+    min_profit_rate_input: float | str,
+) -> tuple[bool, float, float, str]:
+    """트레일링 스탑의 두 퍼센트 설정을 검증하고 원자적으로 저장합니다."""
+
+    def parse_positive_rate(value: float | str, label: str) -> tuple[float | None, str]:
+        if isinstance(value, bool):
+            return None, f"{label}은 0보다 큰 숫자로 입력해 주세요."
+        try:
+            number = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None, f"{label}은 0보다 큰 숫자로 입력해 주세요: '{value}'"
+        if not math.isfinite(number) or number <= 0:
+            return None, f"{label}은 0보다 큰 유한한 숫자여야 합니다."
+        rounded = round(number, 2)
+        if rounded <= 0:
+            return None, f"{label}은 소수점 둘째 자리 기준으로 0보다 커야 합니다."
+        return rounded, ""
+
+    drop_rate, error = parse_positive_rate(drop_rate_input, "고점 대비 하락률")
+    if drop_rate is None:
+        return False, 0.0, 0.0, error
+
+    min_profit_rate, error = parse_positive_rate(
+        min_profit_rate_input,
+        "최소 발동 수익률",
+    )
+    if min_profit_rate is None:
+        return False, 0.0, 0.0, error
+
+    settings = load_settings()
+    settings["trailing_stop_drop_rate"] = drop_rate
+    settings["trailing_stop_min_profit_rate"] = min_profit_rate
+    if save_settings(settings):
+        return True, drop_rate, min_profit_rate, "설정이 저장되었습니다."
+    return False, drop_rate, min_profit_rate, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def get_trailing_stop_auto_trade_enabled() -> bool:
+    """트레일링 스탑 자동매도 활성화 설정을 반환합니다."""
+    return bool(get_setting("trailing_stop_auto_trade_enabled", False))
+
+
+def set_trailing_stop_auto_trade_enabled(enabled: bool) -> bool:
+    """트레일링 스탑 자동매도 활성화 설정을 저장합니다."""
+    return set_setting("trailing_stop_auto_trade_enabled", bool(enabled))
+
+
+def get_buy_order_timeout_settings() -> tuple[int, str]:
+    """매수 미체결 후속 처리 시간(초)과 동작을 반환합니다."""
+    settings = load_settings()
+    try:
+        seconds = int(settings.get("buy_order_timeout_seconds", 0))
+    except (TypeError, ValueError):
+        seconds = 0
+    if seconds < 0:
+        seconds = 0
+
+    action = str(settings.get("buy_order_timeout_action", "cancel")).strip().lower()
+    if action not in ("cancel", "market"):
+        action = "cancel"
+    return seconds, action
+
+
+def set_buy_order_timeout_settings(
+    seconds_input: int | str,
+    action_input: str,
+) -> tuple[bool, int, str, str]:
+    """매수 미체결 후속 처리 설정을 검증하고 원자적으로 저장합니다."""
+    try:
+        seconds = int(str(seconds_input).strip())
+    except (TypeError, ValueError):
+        return False, 0, "", "대기 시간은 0 이상의 정수(초)로 입력해 주세요."
+    if seconds < 0:
+        return False, 0, "", "대기 시간은 0 이상의 정수(초)로 입력해 주세요."
+
+    action = str(action_input).strip().lower()
+    if action not in ("cancel", "market"):
+        return False, 0, "", "동작은 cancel 또는 market으로 입력해 주세요."
+
+    settings = load_settings()
+    settings["buy_order_timeout_seconds"] = seconds
+    settings["buy_order_timeout_action"] = action
+    if save_settings(settings):
+        return True, seconds, action, "설정이 저장되었습니다."
+    return False, seconds, action, "설정 파일 저장 중 오류가 발생했습니다."
 
 
 def get_take_profit_rate() -> float:

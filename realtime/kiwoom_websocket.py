@@ -16,6 +16,8 @@ from config.config import paper_socket_url, real_socket_url
 from utils.logger import log_error, log_info
 
 TickCallback = Callable[[str, datetime, int], None]
+MessageCallback = Callable[[dict], None]
+OutboundProvider = Callable[[], list[dict]]
 
 
 class KiwoomRealtimeClient:
@@ -126,12 +128,15 @@ class KiwoomRealtimeClient:
         on_tick: TickCallback,
         stop_event: threading.Event,
         should_continue: Callable[[], bool],
+        on_connected: Callable[[], None] | None = None,
+        outbound_provider: OutboundProvider | None = None,
+        on_message: MessageCallback | None = None,
     ):
-        """로그인·구독 후 중단 또는 장 종료까지 실시간 데이터를 수신합니다."""
+        """로그인 후 실시간 구독과 공용 TR 요청·응답을 한 연결에서 처리합니다."""
         if websocket is None:
             raise RuntimeError("websocket-client 패키지가 설치되어 있지 않습니다.")
-        if not stock_codes:
-            raise ValueError("구독할 종목코드가 없습니다.")
+        if not stock_codes and outbound_provider is None:
+            raise ValueError("구독 종목 또는 WebSocket 요청 공급자가 필요합니다.")
         if not session_manager.is_authenticated() or not session_manager.token:
             raise RuntimeError("로그인 토큰이 없거나 만료되었습니다.")
 
@@ -143,10 +148,17 @@ class KiwoomRealtimeClient:
         try:
             self._send_json({"trnm": "LOGIN", "token": session_manager.token})
             self._receive_login(stop_event)
-            self._subscribe(stock_codes)
-            log_info(f"[0B WebSocket 구독 시작] 종목 수: {len(stock_codes)}개")
+            if stock_codes:
+                self._subscribe(stock_codes)
+            if on_connected is not None:
+                on_connected()
+            if stock_codes:
+                log_info(f"[0B WebSocket 구독 시작] 종목 수: {len(stock_codes)}개")
 
             while not stop_event.is_set() and should_continue():
+                if outbound_provider is not None:
+                    for payload in outbound_provider():
+                        self._send_json(payload)
                 try:
                     raw_message = current_socket.recv()
                 except websocket.WebSocketTimeoutException:
@@ -158,6 +170,8 @@ class KiwoomRealtimeClient:
                 if message.get("trnm") == "PING":
                     self._send_json(message)
                     continue
+                if on_message is not None:
+                    on_message(message)
                 if message.get("trnm") != "REAL":
                     continue
 
@@ -170,8 +184,10 @@ class KiwoomRealtimeClient:
                 log_error(f"[0B WebSocket 수신 오류] {exc}")
                 raise
         finally:
-            self._unsubscribe(stock_codes)
+            if stock_codes:
+                self._unsubscribe(stock_codes)
             self.close()
             with self._socket_lock:
                 self._socket = None
-            log_info("[0B WebSocket 구독 종료]")
+            if stock_codes:
+                log_info("[0B WebSocket 구독 종료]")

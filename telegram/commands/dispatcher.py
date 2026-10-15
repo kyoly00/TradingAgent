@@ -8,6 +8,8 @@ from .login import handle_login_command
 from .status import handle_status_command
 from .power import handle_power_command
 from .search import handle_search_command
+from .condition import handle_cond_command
+from .jggs import handle_jggs_command
 from .buy import handle_buy_command
 from .sell import handle_sell_command
 from .orders import handle_orders_command
@@ -16,6 +18,12 @@ from .cancel import handle_cancel_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .trailing_stop import (
+    handle_start_trst_command,
+    handle_stop_trst_command,
+    handle_trst_command,
+)
+from .order_timeout import handle_time_command
 from .golden_cross import (
     handle_gdcrs_command,
     handle_start_gdcrs_command,
@@ -86,7 +94,17 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_search_command(args)
         return reply, False
 
-    # 4-1. 상위 20개 종목 순위 조회 ('rank [번호]')
+    # 4-1. HTS 조건검색식 목록 조회 ('cond')
+    if cmd in ("cond", "조건식", "조건검색"):
+        reply = handle_cond_command(args)
+        return reply, False
+
+    # 4-2. 조건검색식별 명령 배정 목록 관리 ('jggs add/list/remove/clear')
+    if cmd == "jggs":
+        reply = handle_jggs_command(args)
+        return reply, False
+
+    # 4-3. 상위 20개 종목 순위 조회 ('rank [번호]')
     if cmd in ("rank", "순위", "랭킹"):
         reply = handle_rank_command(
             args,
@@ -115,8 +133,8 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_modify_command(args)
         return reply, False
 
-    # 9. 주문 취소 명령어 ('cancel {원주문번호} {종목코드} [취소수량]')
-    if cmd in ("cancel", "취소"):
+    # 9. 주문 취소 명령어 ('cancel ...', 'ccl pend')
+    if cmd in ("cancel", "ccl", "취소"):
         reply = handle_cancel_command(args)
         return reply, False
 
@@ -155,6 +173,14 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_stop_ddcrs_command(args[1:])
         return reply, False
 
+    if cmd == "start" and args and args[0] in ("trst", "트레일링스탑"):
+        reply = handle_start_trst_command(args[1:], chat_id=chat_id)
+        return reply, False
+
+    if cmd == "stop" and args and args[0] in ("trst", "트레일링스탑"):
+        reply = handle_stop_trst_command(args[1:])
+        return reply, False
+
     # 13. 스탑로스 상태 및 조작 명령어 ('stls', 'stls start', 'stls stop')
     if cmd in ("stls", "스탑로스", "stoploss"):
         reply = handle_stls_status_command(args)
@@ -170,7 +196,17 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_slr_command(args)
         return reply, False
 
-    # 16. 골든/데드크로스 설정 및 대상 종목 관리 ('gdcrs intv/add/list/remove/clear')
+    # 16. 트레일링 스탑 기준 설정 ('trst {고점대비하락률} {최소발동수익률}')
+    if cmd in ("trst", "트레일링스탑"):
+        reply = handle_trst_command(args)
+        return reply, False
+
+    # 16-1. 매수 미체결 후속 처리 설정 ('time {초} cancel|market')
+    if cmd == "time":
+        reply = handle_time_command(args)
+        return reply, False
+
+    # 17. 골든/데드크로스 설정 및 대상 종목 관리 ('gdcrs intv/add/list/remove/clear')
     if cmd in ("gdcrs", "골든크로스"):
         reply = handle_gdcrs_command(args)
         return reply, False
@@ -179,7 +215,7 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         reply = handle_ddcrs_status_command(args)
         return reply, False
 
-    # 17. 전체 설정값 확인 명령어 ('stts')
+    # 18. 전체 설정값 확인 명령어 ('stts')
     if cmd in ("stts", "settings", "설정"):
         reply = handle_stts_command(args)
         return reply, False
@@ -201,20 +237,28 @@ def dispatch_command(raw_text: str, chat_id: int | str | None = None) -> tuple[s
         "• `start stls` [주기] : 스탑로스 실시간 감시 시작 (기본 10초 주기)\n"
         "• `stop stls` : 스탑로스 실시간 감시 중단\n"
         "• `stls` : 스탑로스 감시 현황 및 보유 종목 확인\n"
+        "• `cond` : 조건검색식 일련번호와 이름 조회\n"
+        "• `jggs add/list/remove/clear` : 조건검색식별 명령 배정 목록 관리\n"
         "• `start gdcrs` / `stop gdcrs` : 골든크로스 자동매수 감시 시작/중지\n"
         "• `start ddcrs` / `stop ddcrs` : 보유 종목 데드크로스 자동매도 감시 시작/중지\n"
+        "• `start trst` / `stop trst` : 보유 종목 트레일링 스탑 자동매도 시작/중지\n"
         "• `tpr {익절기준}` : 익절 기준 퍼센티지 설정 (예: tpr 5 -> +5% 도달 시 익절)\n"
         "• `slr {손절기준}` : 손절 기준 퍼센티지 설정 (예: slr 10 -> -10% 도달 시 손절)\n"
+        "• `trst {고점대비하락률} {최소발동수익률}` : 트레일링 스탑 기준 설정\n"
         "• `gdcrs intv {단기} {장기}` : 골든/데드크로스 분봉 설정\n"
         "• `gdcrs add/list/remove/clear` : 골든크로스 대상 종목 관리\n"
         "• `ddcrs` : 데드크로스 자동매도 감시 상태 확인\n"
         "• `orders` [all] : 주문 체결/미체결 내역 확인\n"
         "• `modify {원주문번호} [수량] {단가}` : 주문 정정 (예: modify 0000139 71000)\n"
         "• `cancel {원주문번호} [수량]` : 주문 취소 (예: cancel 0000139)\n"
+        "• `ccl pend` : 현재 미체결 주문 전체 취소\n"
+        "• `time {초} cancel|market` : 매수 미체결 후속 처리 설정\n"
         "• `buy {종목코드} {수량} [지정가]` : 종목 매수 주문\n"
         "• `buy {종목코드} max {금액}` : 예산 내 최대 수량 시장가 매수\n"
+        "• `buy {종목코드} {수량} tick {틱}` : 낮은 매수호가로 지정가 매수\n"
+        "• `buy {종목코드} max {금액} tick {틱}` : 최대금액 내 호가 지정 매수\n"
         "• `sell {종목코드} {수량} [지정가]` : 종목 매도 주문\n"
-        "• `report` 또는 `r` : 계좌 자산 및 보유 종목 조회\n"
+        "• `report` 또는 `r` : 계좌 자산, 보유 종목 및 미체결 주문 조회\n"
         "• `srch {종목코드}` : 종목 정보 조회\n"
         "• `rank` [번호] : 상위 20개 순위 조회 (1:거래대금, 2:상승률, 3:거래량, 4:인기검색)\n"
         "• `rank {번호} cmd {개수} {명령}` : 순위 종목 대상으로 명령 실행\n"

@@ -9,6 +9,51 @@
 from api.order import get_orders
 
 
+def format_order_list(
+    order_list: list[dict],
+    title_suffix: str,
+    *,
+    include_controls: bool = True,
+) -> str:
+    """정규화된 주문 목록을 텔레그램 메시지 형식으로 변환합니다."""
+    lines = [f"📋 **[{title_suffix}]** (총 {len(order_list)}건)\n"]
+
+    for idx, item in enumerate(order_list, start=1):
+        ord_no = item.get("ord_no") or "-"
+        stk_nm = item.get("stock_name") or "-"
+        stk_cd = item.get("stock_code") or "-"
+        io_type = item.get("io_type") or "-"
+        ord_type = item.get("order_type") or "-"
+        ord_qty = item.get("order_qty", 0)
+        cntr_qty = item.get("cntr_qty", 0)
+        remn_qty = item.get("remn_qty", 0)
+        ord_price = item.get("order_price", 0)
+        cntr_price = item.get("cntr_price", 0)
+        ord_tm = item.get("order_time") or "-"
+        mdfy_cncl = item.get("modify_cancel", "").strip()
+
+        price_disp = f"{ord_price:,}원" if ord_price > 0 else "시장가"
+        status_disp = f" | {mdfy_cncl}" if mdfy_cncl else ""
+
+        line = (
+            f"**{idx}. {stk_nm}** (`{stk_cd}`) | {io_type}{status_disp}\n"
+            f"• 주문번호: `{ord_no}` | 유형: {ord_type} | 시간: {ord_tm}\n"
+            f"• 수량: {ord_qty:,}주 (체결: {cntr_qty:,}주, 잔량: **{remn_qty:,}주**)\n"
+            f"• 주문단가: {price_disp}"
+        )
+        if cntr_qty > 0 and cntr_price > 0:
+            line += f" | 체결단가: {cntr_price:,}원"
+
+        lines.append(line)
+
+    if include_controls:
+        lines.append("\n💡 **주문 제어 팁**:")
+        lines.append("• 정정: `modify {주문번호} {정정단가}` (또는 `modify {주문번호} {수량} {단가}`)")
+        lines.append("• 취소: `cancel {주문번호}` (또는 `cancel {주문번호} {수량}`)")
+
+    return "\n".join(lines)
+
+
 def handle_orders_command(args: list[str]) -> str:
     """
     'orders' 명령어 인자를 분석하여 주문 체결/미체결 내역을 조회합니다.
@@ -52,39 +97,4 @@ def handle_orders_command(args: list[str]) -> str:
         else:
             return "📋 당일 접수된 주문 내역이 없습니다."
 
-    # 응답 메시지 구성
-    lines = [f"📋 **[{title_suffix}]** (총 {len(order_list)}건)\n"]
-
-    for idx, item in enumerate(order_list, start=1):
-        ord_no = item.get("ord_no") or "-"
-        stk_nm = item.get("stock_name") or "-"
-        stk_cd = item.get("stock_code") or "-"
-        io_type = item.get("io_type") or "-"
-        ord_type = item.get("order_type") or "-"
-        ord_qty = item.get("order_qty", 0)
-        cntr_qty = item.get("cntr_qty", 0)
-        remn_qty = item.get("remn_qty", 0)
-        ord_price = item.get("order_price", 0)
-        cntr_price = item.get("cntr_price", 0)
-        ord_tm = item.get("order_time") or "-"
-        mdfy_cncl = item.get("modify_cancel", "").strip()
-
-        price_disp = f"{ord_price:,}원" if ord_price > 0 else "시장가"
-        status_disp = f" | {mdfy_cncl}" if mdfy_cncl else ""
-
-        line = (
-            f"**{idx}. {stk_nm}** (`{stk_cd}`) | {io_type}{status_disp}\n"
-            f"• 주문번호: `{ord_no}` | 유형: {ord_type} | 시간: {ord_tm}\n"
-            f"• 수량: {ord_qty:,}주 (체결: {cntr_qty:,}주, 잔량: **{remn_qty:,}주**)\n"
-            f"• 주문단가: {price_disp}"
-        )
-        if cntr_qty > 0 and cntr_price > 0:
-            line += f" | 체결단가: {cntr_price:,}원"
-
-        lines.append(line)
-
-    lines.append("\n💡 **주문 제어 팁**:")
-    lines.append("• 정정: `modify {주문번호} {정정단가}` (또는 `modify {주문번호} {수량} {단가}`)")
-    lines.append("• 취소: `cancel {주문번호}` (또는 `cancel {주문번호} {수량}`)")
-
-    return "\n".join(lines)
+    return format_order_list(order_list, title_suffix)

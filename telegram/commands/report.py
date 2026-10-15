@@ -1,11 +1,13 @@
 """
 계좌 자산 및 보유 종목 현황 리포트 명령어 처리 모듈:
-'report' 또는 'r' 명령어를 수신하면 키움 kt00018 TR을 호출하여
+'report' 또는 'r' 명령어를 수신하면 키움 kt00018, kt00007 TR을 호출하여
 자금 현황(추정예탁자산, 총매입금액, 총평가금액, 총평가손익, 총수익률)과
-보유 종목(종목번호, 종목명, 보유수량, 매입가, 현재가, 수익률)을 이모지와 함께 회신합니다.
+보유 종목 및 미체결 주문 내역을 이모지와 함께 회신합니다.
 """
 
 from api.account import get_account_balance
+from api.order import get_orders
+from .orders import format_order_list
 
 
 def _format_money(val: int) -> str:
@@ -35,7 +37,7 @@ def _format_rate(rt_val: float) -> str:
 
 def handle_report_command(args: list[str] | None = None) -> str:
     """
-    'report' 또는 'r' 명령어를 처리하여 계좌 자산 현황과 보유 종목 목록을 반환합니다.
+    'report' 또는 'r' 명령어를 처리하여 계좌 자산, 보유 종목 및 미체결 주문을 반환합니다.
 
     :param args: 명령어 인자 (기본 미사용)
     :return: 텔레그램 메시지 문자열
@@ -87,5 +89,24 @@ def handle_report_command(args: list[str] | None = None) -> str:
             report_lines.append(item_block)
             if idx < count:
                 report_lines.append("")
+
+    # 3. 미체결 주문 내역
+    report_lines.extend(["", "━━━━━━━━━━━━━━━━━━━"])
+    pending_result = get_orders(qry_tp="3")
+    if not pending_result.get("success"):
+        error_message = pending_result.get("message", "알 수 없는 오류")
+        report_lines.append(f"⚠️ [미체결 주문 조회 실패]\n• 사유: {error_message}")
+    else:
+        pending_orders = pending_result.get("orders", [])
+        if pending_orders:
+            report_lines.append(
+                format_order_list(
+                    pending_orders,
+                    "미체결 주문 내역",
+                    include_controls=False,
+                )
+            )
+        else:
+            report_lines.append("📋 [미체결 주문 내역]\n• 현재 접수된 미체결 주문이 없습니다.")
 
     return "\n".join(report_lines)

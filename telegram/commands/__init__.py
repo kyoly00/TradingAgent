@@ -5,6 +5,8 @@
 
 from .dispatcher import dispatch_command
 from .search import handle_search_command
+from .condition import handle_cond_command
+from .jggs import handle_jggs_command
 from .buy import handle_buy_command
 from .sell import handle_sell_command
 from .orders import handle_orders_command
@@ -14,6 +16,12 @@ from .help import handle_help_command
 from .report import handle_report_command
 from .market_hours import handle_mkhr_command
 from .settings_status import handle_stts_command
+from .trailing_stop import (
+    handle_start_trst_command,
+    handle_stop_trst_command,
+    handle_trst_command,
+)
+from .order_timeout import handle_time_command
 from .golden_cross import (
     handle_gdcrs_command,
     handle_start_gdcrs_command,
@@ -38,6 +46,8 @@ __all__ = [
 
     "dispatch_command",
     "handle_search_command",
+    "handle_cond_command",
+    "handle_jggs_command",
     "handle_buy_command",
     "handle_sell_command",
     "handle_orders_command",
@@ -47,6 +57,10 @@ __all__ = [
     "handle_report_command",
     "handle_mkhr_command",
     "handle_stts_command",
+    "handle_trst_command",
+    "handle_start_trst_command",
+    "handle_stop_trst_command",
+    "handle_time_command",
     "handle_gdcrs_command",
     "handle_start_gdcrs_command",
     "handle_stop_gdcrs_command",
@@ -61,10 +75,5 @@ __all__ = [
     "handle_stls_status_command",
     "handle_rank_command",
 ]
-
-
-
-
-
 
 

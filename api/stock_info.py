@@ -4,8 +4,8 @@ tr_docs/ka10001.json 명세를 기반으로 종목코드를 전달받아
 키움 REST API(/api/dostk/stkinfo)를 호출하여 종목의 현재가, 거래량, 시가, 고가, 저가, 전일대비 등을 조회합니다.
 """
 
-import requests
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error, log_info
 
 TR_ID_KA10001 = "ka10001"
@@ -63,7 +63,7 @@ def get_stock_info(stock_code: str) -> dict:
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")

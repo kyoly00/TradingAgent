@@ -2,9 +2,8 @@
 
 from datetime import datetime
 
-import requests
-
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error
 
 TR_ID_KA10080 = "ka10080"
@@ -61,7 +60,7 @@ def get_minute_chart(
     }
 
     try:
-        response = requests.post(
+        response = http_client.post(
             f"{session_manager.host}{ENDPOINT_CHART}",
             headers=headers,
             json=body,

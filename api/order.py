@@ -4,8 +4,8 @@ tr_docs/kt10000.json 명세를 기반으로 국내주식 매수 주문(kt10000)�
 시장가(trde_tp='3') 및 지정가(trde_tp='0') 매수를 지원합니다.
 """
 
-import requests
 from api.auth import session_manager
+from api.http_queue import http_client
 from utils.logger import log_error, log_info
 
 TR_ID_KT10000 = "kt10000"
@@ -92,7 +92,7 @@ def buy_stock(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -218,7 +218,7 @@ def sell_stock(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -353,7 +353,7 @@ def get_orders(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -511,7 +511,7 @@ def modify_order(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
@@ -586,6 +586,7 @@ def cancel_order(
             "base_orig_ord_no": orig_ord_no,
             "stock_code": stock_code,
             "quantity": quantity,
+            "cancelled_quantity": 0,
             "message": "로그인된 세션이 없거나 토큰이 만료되었습니다. 먼저 'login paper' 또는 'login real'을 실행해 주세요.",
             "raw_data": {},
         }
@@ -600,6 +601,7 @@ def cancel_order(
                 "base_orig_ord_no": orig_ord_no,
                 "stock_code": "",
                 "quantity": quantity,
+                "cancelled_quantity": 0,
                 "message": f"주문번호({orig_ord_no})에 해당하는 종목을 당일 주문 내역에서 찾을 수 없습니다. 종목코드를 함께 입력해 주세요.",
                 "raw_data": {},
             }
@@ -631,13 +633,14 @@ def cancel_order(
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=10)
+        response = http_client.post(url, headers=headers, json=body, timeout=10)
         data = response.json()
 
         return_code = data.get("return_code")
         return_msg = data.get("return_msg", "")
         new_ord_no = data.get("ord_no", "")
         base_no = data.get("base_orig_ord_no", clean_ord_no)
+        cancelled_quantity = _parse_int(data.get("cncl_qty"))
 
         is_success = (response.status_code == 200) and (str(return_code) == "0")
 
@@ -652,6 +655,7 @@ def cancel_order(
                 "base_orig_ord_no": base_no,
                 "stock_code": clean_code,
                 "quantity": quantity,
+                "cancelled_quantity": cancelled_quantity,
                 "message": return_msg or "취소주문이 완료되었습니다.",
                 "raw_data": data,
             }
@@ -664,6 +668,7 @@ def cancel_order(
                 "base_orig_ord_no": clean_ord_no,
                 "stock_code": clean_code,
                 "quantity": quantity,
+                "cancelled_quantity": 0,
                 "message": err_msg,
                 "raw_data": data,
             }
@@ -675,8 +680,7 @@ def cancel_order(
             "base_orig_ord_no": clean_ord_no,
             "stock_code": clean_code,
             "quantity": quantity,
+            "cancelled_quantity": 0,
             "message": f"네트워크 또는 API 호출 오류: {str(e)}",
             "raw_data": {},
         }
-
-

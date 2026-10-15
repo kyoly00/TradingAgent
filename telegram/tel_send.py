@@ -6,7 +6,6 @@ config/config.py의 telegram_chat_id와 telegram_token을 사용하여
 
 import os
 import sys
-import requests
 from dotenv import load_dotenv
 
 # .env 환경 변수 로드 (config 모듈 임포트 전 적용)
@@ -17,6 +16,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
+from api.http_queue import http_client
 from config.config import telegram_chat_id, telegram_token
 
 
@@ -41,7 +41,7 @@ def send_telegram_message(message: str, chat_id: str | int | None = None) -> boo
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = http_client.post(url, json=payload, timeout=10)
         data = response.json()
 
         if data.get("ok"):
