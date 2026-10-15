@@ -8,6 +8,7 @@ import os
 import json
 import math
 import re
+from datetime import datetime, timedelta
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(PROJECT_ROOT, "config", "data", "settings.json")
@@ -50,6 +51,9 @@ def load_settings() -> dict:
         "condition_command_mappings": [],
         "buy_order_timeout_seconds": 0,
         "buy_order_timeout_action": "cancel",
+        "repurchase_cooldown_hours": 0,
+        "sell_cooldown_records": {},
+        "max_holding_count": 0,
     }
 
 
@@ -652,6 +656,134 @@ def set_buy_order_timeout_settings(
     if save_settings(settings):
         return True, seconds, action, "설정이 저장되었습니다."
     return False, seconds, action, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def get_repurchase_cooldown_hours() -> float:
+    """매도 종목의 재매수 제한 시간을 시간 단위로 반환합니다."""
+    value = get_setting("repurchase_cooldown_hours", 0)
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(hours) or hours < 0:
+        return 0.0
+    return hours
+
+
+def get_max_holding_count() -> int:
+    """보유할 수 있는 최대 종목 수를 반환하며 0은 제한 없음을 의미합니다."""
+    value = get_setting("max_holding_count", 0)
+    try:
+        count = int(str(value).strip())
+    except (TypeError, ValueError):
+        return 0
+    return count if count >= 0 else 0
+
+
+def set_max_holding_count(count_input: int | str) -> tuple[bool, int, str]:
+    """최대 보유 종목 수를 0 이상의 정수로 검증하여 저장합니다."""
+    raw_count = str(count_input).strip()
+    if not raw_count.isdigit():
+        return False, 0, "최대 보유 종목 수는 0 이상의 정수로 입력해 주세요."
+
+    count = int(raw_count)
+    settings = load_settings()
+    settings["max_holding_count"] = count
+    if save_settings(settings):
+        return True, count, "설정이 저장되었습니다."
+    return False, count, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def set_repurchase_cooldown_hours(
+    hours_input: float | str,
+) -> tuple[bool, float, str]:
+    """재매수 제한 시간을 검증하고 저장하며 0이면 기존 기록을 비웁니다."""
+    try:
+        hours = float(str(hours_input).strip())
+    except (TypeError, ValueError):
+        return False, 0.0, "쿨다운 시간은 0 이상의 숫자로 입력해 주세요."
+    if not math.isfinite(hours) or hours < 0:
+        return False, 0.0, "쿨다운 시간은 0 이상의 유한한 숫자여야 합니다."
+
+    hours = round(hours, 2)
+    settings = load_settings()
+    settings["repurchase_cooldown_hours"] = hours
+    if hours == 0:
+        settings["sell_cooldown_records"] = {}
+    if save_settings(settings):
+        return True, hours, "설정이 저장되었습니다."
+    return False, hours, "설정 파일 저장 중 오류가 발생했습니다."
+
+
+def _cooldown_record_key(stock_code: str, account_scope: str = "") -> str:
+    clean_code = str(stock_code).strip()
+    clean_scope = str(account_scope or "default").strip().lower()
+    return f"{clean_scope}:{clean_code}"
+
+
+def record_stock_sales(
+    stock_codes: list[str] | set[str] | tuple[str, ...],
+    account_scope: str = "",
+    sold_at: datetime | None = None,
+) -> bool:
+    """쿨다운이 활성화된 경우 종목별 최근 매도 시각을 한 번에 저장합니다."""
+    if get_repurchase_cooldown_hours() <= 0:
+        return True
+
+    clean_codes = {
+        str(code).strip()
+        for code in stock_codes
+        if len(str(code).strip()) == 6 and str(code).strip().isdigit()
+    }
+    if not clean_codes:
+        return True
+
+    settings = load_settings()
+    records = settings.get("sell_cooldown_records")
+    if not isinstance(records, dict):
+        records = {}
+    timestamp = (sold_at or datetime.now()).isoformat(timespec="seconds")
+    for stock_code in clean_codes:
+        records[_cooldown_record_key(stock_code, account_scope)] = timestamp
+    settings["sell_cooldown_records"] = records
+    return save_settings(settings)
+
+
+def record_stock_sale(
+    stock_code: str,
+    account_scope: str = "",
+    sold_at: datetime | None = None,
+) -> bool:
+    """단일 종목의 최근 매도 시각을 저장합니다."""
+    return record_stock_sales([stock_code], account_scope, sold_at)
+
+
+def get_stock_buy_cooldown(
+    stock_code: str,
+    account_scope: str = "",
+    now: datetime | None = None,
+) -> tuple[bool, int, datetime | None]:
+    """종목의 재매수 차단 여부, 남은 초, 최근 매도 시각을 반환합니다."""
+    hours = get_repurchase_cooldown_hours()
+    if hours <= 0:
+        return False, 0, None
+
+    settings = load_settings()
+    records = settings.get("sell_cooldown_records")
+    if not isinstance(records, dict):
+        return False, 0, None
+    raw_sold_at = records.get(_cooldown_record_key(stock_code, account_scope))
+    if not raw_sold_at:
+        return False, 0, None
+    try:
+        sold_at = datetime.fromisoformat(str(raw_sold_at))
+    except (TypeError, ValueError):
+        return False, 0, None
+
+    current = now or datetime.now()
+    expires_at = sold_at + timedelta(hours=hours)
+    remaining_seconds = max(0, math.ceil((expires_at - current).total_seconds()))
+    return remaining_seconds > 0, remaining_seconds, sold_at
 
 
 def get_take_profit_rate() -> float:

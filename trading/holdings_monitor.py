@@ -8,7 +8,7 @@ from datetime import datetime
 from api.account import get_account_balance
 from api.auth import session_manager
 from utils.logger import log_error, log_info
-from utils.settings import get_market_hours
+from utils.settings import get_market_hours, record_stock_sales
 
 Notifier = Callable[[str], object]
 
@@ -177,6 +177,26 @@ class HoldingsChangeWatcher:
         # 최초 성공 조회는 비교 기준으로만 저장합니다.
         if previous_holdings is None:
             return
+
+        sold_codes = {
+            stock_code
+            for stock_code in previous_holdings.keys() | current_holdings.keys()
+            if (
+                current_holdings.get(stock_code).quantity
+                if current_holdings.get(stock_code)
+                else 0
+            )
+            < (
+                previous_holdings.get(stock_code).quantity
+                if previous_holdings.get(stock_code)
+                else 0
+            )
+        }
+        if sold_codes and not record_stock_sales(
+            sold_codes,
+            account_scope=str(getattr(session_manager, "mode", "") or ""),
+        ):
+            log_error("[재매수 쿨다운 기록 실패] 매도 감지 종목을 저장하지 못했습니다.")
 
         message = self._format_changes(previous_holdings, current_holdings)
         if message is None or self._notifier is None:

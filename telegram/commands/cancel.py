@@ -6,7 +6,33 @@
 종목코드가 생략되면 당일 미체결/주문 내역에서 주문번호로 자동 조회합니다.
 """
 
+import time
+
 from api.order import cancel_order, get_orders
+
+RATE_LIMIT_RETRY_DELAY_SECONDS = 1.1
+MAX_RATE_LIMIT_RETRIES = 2
+
+
+def _is_rate_limit_error(result: dict) -> bool:
+    """키움 유량 제한 오류(1700) 여부를 판별합니다."""
+    message = str(result.get("message") or "")
+    raw_data = result.get("raw_data") or {}
+    raw_message = str(raw_data.get("return_msg") or "")
+    return "1700" in message or "1700" in raw_message
+
+
+def _cancel_with_rate_limit_retry(**kwargs) -> tuple[dict, int]:
+    """유량 제한으로 거절된 취소 요청만 제한 횟수 내에서 분할 재시도합니다."""
+    retry_count = 0
+    while True:
+        result = cancel_order(**kwargs)
+        if result.get("success") or not _is_rate_limit_error(result):
+            return result, retry_count
+        if retry_count >= MAX_RATE_LIMIT_RETRIES:
+            return result, retry_count
+        retry_count += 1
+        time.sleep(RATE_LIMIT_RETRY_DELAY_SECONDS * retry_count)
 
 
 def _cancel_pending_orders() -> str:
@@ -18,7 +44,11 @@ def _cancel_pending_orders() -> str:
             f"• 사유: {pending_result.get('message', '알 수 없는 오류')}"
         )
 
-    pending_orders = pending_result.get("orders", [])
+    pending_orders = [
+        item
+        for item in pending_result.get("orders", [])
+        if int(item.get("remn_qty") or 0) > 0
+    ]
     if not pending_orders:
         return "📋 현재 취소할 미체결 주문이 없습니다."
 
@@ -54,12 +84,13 @@ def _cancel_pending_orders() -> str:
             )
             continue
 
-        cancel_result = cancel_order(
+        cancel_result, retry_count = _cancel_with_rate_limit_retry(
             orig_ord_no=order_number,
             stock_code=stock_code,
             quantity=0,
             exchange=exchange,
         )
+        retry_text = f" · 유량 제한 재시도 {retry_count}회" if retry_count else ""
 
         if cancel_result.get("success"):
             success_count += 1
@@ -67,6 +98,7 @@ def _cancel_pending_orders() -> str:
             result_lines.append(
                 f"✅ {index}. {stock_name} ({stock_code}) | 잔량 {remaining_quantity:,}주\n"
                 f"   원주문: `{order_number}` → 취소접수: `{cancel_order_number}`"
+                f"{retry_text}"
             )
         else:
             failure_count += 1
@@ -74,6 +106,7 @@ def _cancel_pending_orders() -> str:
                 f"❌ {index}. {stock_name} ({stock_code}) | 잔량 {remaining_quantity:,}주\n"
                 f"   원주문: `{order_number}` | "
                 f"사유: {cancel_result.get('message', '알 수 없는 오류')}"
+                f"{retry_text}"
             )
 
     lines = [

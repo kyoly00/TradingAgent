@@ -5,8 +5,14 @@ tr_docs/kt10000.json 명세를 기반으로 국내주식 매수 주문(kt10000)�
 """
 
 from api.auth import session_manager
+from api.account import get_account_balance
 from api.http_queue import http_client
 from utils.logger import log_error, log_info
+from utils.settings import (
+    get_max_holding_count,
+    get_stock_buy_cooldown,
+    record_stock_sale,
+)
 
 TR_ID_KT10000 = "kt10000"
 TR_ID_KT10001 = "kt10001"
@@ -15,6 +21,20 @@ TR_ID_KT10003 = "kt10003"
 TR_ID_KT00007 = "kt00007"
 ENDPOINT_ORDER = "/api/dostk/ordr"
 ENDPOINT_ACCOUNT = "/api/dostk/acnt"
+
+
+def _format_cooldown_remaining(remaining_seconds: int) -> str:
+    """쿨다운 잔여 초를 읽기 쉬운 시간·분 문자열로 변환합니다."""
+    hours, remainder = divmod(max(0, remaining_seconds), 3600)
+    minutes = (remainder + 59) // 60
+    if minutes == 60:
+        hours += 1
+        minutes = 0
+    if hours and minutes:
+        return f"약 {hours}시간 {minutes}분"
+    if hours:
+        return f"약 {hours}시간"
+    return f"약 {max(1, minutes)}분"
 
 
 def buy_stock(
@@ -59,6 +79,75 @@ def buy_stock(
     clean_code = stock_code.strip()
     if clean_code.isdigit() and len(clean_code) < 6:
         clean_code = clean_code.zfill(6)
+
+    cooldown_blocked, remaining_seconds, sold_at = get_stock_buy_cooldown(
+        clean_code,
+        account_scope=str(session_manager.mode or ""),
+    )
+    if cooldown_blocked:
+        sold_at_text = sold_at.strftime("%Y-%m-%d %H:%M:%S") if sold_at else "정보 없음"
+        return {
+            "success": False,
+            "ord_no": None,
+            "stock_code": clean_code,
+            "order_type": "시장가" if price is None else "지정가",
+            "quantity": quantity,
+            "price": price,
+            "cooldown_blocked": True,
+            "remaining_seconds": remaining_seconds,
+            "message": (
+                "최근 매도된 종목으로 재매수 쿨다운이 적용 중입니다. "
+                f"남은 시간: {_format_cooldown_remaining(remaining_seconds)} "
+                f"(매도 감지: {sold_at_text})"
+            ),
+            "raw_data": {},
+        }
+
+    max_holding_count = get_max_holding_count()
+    if max_holding_count > 0:
+        balance_result = get_account_balance()
+        if not balance_result.get("success"):
+            return {
+                "success": False,
+                "ord_no": None,
+                "stock_code": clean_code,
+                "order_type": "시장가" if price is None else "지정가",
+                "quantity": quantity,
+                "price": price,
+                "max_holdings_blocked": True,
+                "message": (
+                    "최대 보유 종목 수 확인을 위한 잔고 조회에 실패하여 "
+                    f"매수 주문을 중단했습니다: {balance_result.get('error') or '알 수 없는 오류'}"
+                ),
+                "raw_data": {},
+            }
+
+        held_codes = set()
+        for item in balance_result.get("holdings") or []:
+            try:
+                holding_quantity = int(item.get("quantity") or 0)
+            except (TypeError, ValueError):
+                continue
+            holding_code = str(item.get("stock_code") or "").strip()
+            if holding_quantity > 0 and holding_code:
+                held_codes.add(holding_code)
+        if clean_code not in held_codes and len(held_codes) >= max_holding_count:
+            return {
+                "success": False,
+                "ord_no": None,
+                "stock_code": clean_code,
+                "order_type": "시장가" if price is None else "지정가",
+                "quantity": quantity,
+                "price": price,
+                "max_holdings_blocked": True,
+                "holding_count": len(held_codes),
+                "max_holding_count": max_holding_count,
+                "message": (
+                    f"최대 보유 종목 수({max_holding_count}개)에 도달하여 "
+                    "새로운 종목을 매수할 수 없습니다."
+                ),
+                "raw_data": {},
+            }
 
     # 매매구분(trde_tp) 및 단가 설정:
     # 3: 시장가, 0: 보통(지정가)
@@ -228,6 +317,11 @@ def sell_stock(
         is_success = (response.status_code == 200) and (str(return_code) == "0")
 
         if is_success:
+            if price is None and not record_stock_sale(
+                clean_code,
+                account_scope=str(session_manager.mode or ""),
+            ):
+                log_error(f"[매도 쿨다운 기록 실패] 종목: {clean_code}")
             log_info(
                 f"[매도 성공] 종목: {clean_code}, 유형: {order_type_desc}, 수량: {quantity:,}주, "
                 f"단가: {f'{price:,}원' if price is not None else '시장가'}, 주문번호: {ord_no}"
@@ -365,7 +459,7 @@ def get_orders(
             raw_list = data.get("acnt_ord_cntr_prps_dtl", [])
             orders = []
             for item in raw_list:
-                orders.append({
+                normalized_order = {
                     "ord_no": item.get("ord_no", "").strip(),
                     "orig_ord_no": item.get("ori_ord", "").strip(),
                     "stock_code": _clean_stock_code(item.get("stk_cd")),
@@ -380,7 +474,12 @@ def get_orders(
                     "order_time": item.get("ord_tm", "").strip(),
                     "modify_cancel": item.get("mdfy_cncl", "").strip(),
                     "exchange": item.get("dmst_stex_tp", "").strip(),
-                })
+                }
+                # 모의투자 kt00007은 미체결 조회에서도 잔량 0인 체결·취소
+                # 이력을 반환할 수 있으므로 실제 주문잔량이 있는 항목만 노출합니다.
+                if str(qry_tp).strip() == "3" and normalized_order["remn_qty"] <= 0:
+                    continue
+                orders.append(normalized_order)
 
             log_info(f"[주문 내역 조회 성공] 조회구분: {qry_tp}, 건수: {len(orders)}건")
             return {

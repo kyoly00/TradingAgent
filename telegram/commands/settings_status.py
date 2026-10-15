@@ -16,6 +16,8 @@ from utils.settings import (
     get_golden_cross_stocks,
     get_condition_command_mappings,
     get_buy_order_timeout_settings,
+    get_repurchase_cooldown_hours,
+    get_max_holding_count,
 )
 
 
@@ -44,6 +46,8 @@ def handle_stts_command(args: list[str] | None = None) -> str:
     golden_cross_stocks = get_golden_cross_stocks()
     condition_command_mappings = get_condition_command_mappings()
     buy_timeout_seconds, buy_timeout_action = get_buy_order_timeout_settings()
+    repurchase_cooldown_hours = get_repurchase_cooldown_hours()
+    max_holding_count = get_max_holding_count()
     golden_cross_status = golden_cross_watcher.get_status()
     dead_cross_status = dead_cross_watcher.get_status()
     trailing_stop_status = trailing_stop_watcher.get_status()
@@ -114,6 +118,12 @@ def handle_stts_command(args: list[str] | None = None) -> str:
         f"• 🧩 조건검색식 명령 배정: {len(condition_command_mappings)}개 (조회: `jggs list`)",
         f"• ⏱️ 매수 미체결 후속 처리: {buy_timeout_state} "
         f"(설정: `time {buy_timeout_seconds} {buy_timeout_action}`)",
+        f"• 🕒 매도 후 재매수 쿨다운: "
+        f"{'제한 없음' if repurchase_cooldown_hours == 0 else f'{repurchase_cooldown_hours:g}시간'} "
+        f"(설정: `cooldown {repurchase_cooldown_hours:g}`)",
+        f"• 📦 최대 보유 종목 수: "
+        f"{'제한 없음' if max_holding_count == 0 else f'{max_holding_count}개'} "
+        f"(설정: `mxhold {max_holding_count}`)",
         f"• 🤖 골든크로스 자동매수: {golden_cross_state}",
         f"• 📉 데드크로스 자동매도: {dead_cross_state}",
         f"• 🔌 공용 WebSocket: {realtime_state} "
